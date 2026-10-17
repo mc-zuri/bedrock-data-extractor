@@ -1,6 +1,6 @@
 # What minecraft.net offers, into versions/: every 6 hours, each build that is new (both channels) has its zips hashed,
-# and the result is committed to this repo's main. That push runs the extract workflow, which extracts each new
-# release into bedrock-data. Run by hand with builds (1.21.42.01 1.26.52.3) to track those instead, again with force.
+# and the result is committed to main. Each new release is then handed to the support workflow, which tries to export
+# it. Run by hand with builds (1.21.42.01 1.26.52.3) to track those instead, again with force.
 name: track
 
 on:
@@ -23,7 +23,9 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
+  # running the support workflow (a GITHUB_TOKEN can run a workflow_dispatch, though its pushes run none)
+  actions: write
 
 concurrency:
   group: track
@@ -34,10 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      # through this repo's own write deploy key: a push made with it runs the extract workflow (a GITHUB_TOKEN's would not)
       - uses: actions/checkout@v5
-        with:
-          ssh-key: ${{ secrets.EXTRACTOR_DEPLOY_KEY }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
@@ -51,15 +50,28 @@ jobs:
           FORCE: ${{ inputs.force && '--force' || '' }}
         run: pnpm track $BUILDS --channel="$CHANNEL" $FORCE
       - name: Commit to main
+        id: commit
         run: |
           git add versions
           if git diff --cached --quiet; then
             echo 'nothing new'
             exit 0
           fi
-          builds=$(git diff --cached --name-only -- versions | grep -oE '(release|preview)/[0-9.]+[0-9]' | sort -u | paste -sd ' ' -)
+          tracked=$(git diff --cached --name-only -- versions | grep -oE '(release|preview)/[0-9.]+[0-9]' | sort -u | paste -sd ' ' -)
+          releases=$(git diff --cached --name-only --diff-filter=A -- versions/release | grep -oE '[0-9]+(\.[0-9]+){3}' | paste -sd ' ' -)
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -q -m "track ${builds:-versions.json}"
+          git commit -q -m "track ${tracked:-versions.json}"
           git pull -q --rebase
           git push -q
+          echo "releases=$releases" >> "$GITHUB_OUTPUT"
+      - name: Try to support each new release
+        if: steps.commit.outputs.releases != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASES: ${{ steps.commit.outputs.releases }}
+        run: |
+          for build in $RELEASES; do
+            gh workflow run support.yml --ref main -f build="$build"
+            echo "support $build: started"
+          done

@@ -9,6 +9,7 @@
   "packageManager": "pnpm@11.13.0",
   "scripts": {
     "track": "node --env-file-if-exists=.env src/main.ts track",
+    "support": "node --env-file-if-exists=.env src/main.ts support",
     "extract": "node --env-file-if-exists=.env src/main.ts extract",
     "status": "node --env-file-if-exists=.env src/main.ts status",
     "typecheck": "tsc",

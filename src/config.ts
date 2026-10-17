@@ -17,6 +17,8 @@ function positiveIntSetting(name: string, fallback: number): number {
 // the builds minecraft.net has offered, kept in this repo, and the schemas of its files
 export const VERSIONS_DIR = join(ROOT, 'versions')
 export const SCHEMAS_DIR = join(ROOT, 'schemas')
+// the releases exported to bedrock-data
+export const SUPPORTED_FILE = join(ROOT, 'supported.json')
 // the bedrock-data checkout the extract step writes into
 export const BEDROCK_DATA_DIR = pathSetting('BEDROCK_DATA_DIR', '../bedrock-data')
 // a build's zips while it is extracted

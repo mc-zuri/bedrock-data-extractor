@@ -1,7 +1,8 @@
-import { BEDROCK_DATA_DIR, CACHE_DIR, JOBS, SCHEMAS_DIR, VERSIONS_DIR } from './config.ts'
+import { BEDROCK_DATA_DIR, CACHE_DIR, JOBS, SCHEMAS_DIR, SUPPORTED_FILE, VERSIONS_DIR } from './config.ts'
 import { DataRepo } from './dataRepo.ts'
 import { extract, isExtracted } from './extract.ts'
 import { fetchLinks } from './mojang.ts'
+import { Supported } from './supported.ts'
 import { isTracked, targetName, track, type Target } from './track.ts'
 import { errorMessage, forEach } from './util.ts'
 import { VersionStore } from './versionStore.ts'
@@ -26,15 +27,20 @@ const steps: Record<string, Step> = {
       'what minecraft.net offers now, both channels (or the builds named, as their zips name them: 1.21.42.01; --channel=preview): each build new to versions/, its zips hashed (--force: again)',
     run: trackBuilds,
   },
+  support: { about: '<build...>: add tracked releases to supported.json', run: support },
   extract: {
-    about: 'each release in versions/ that bedrock-data has not got as versions/ has it now (or the builds named): its data into bedrock-data (--force: again)',
+    about: 'each supported release bedrock-data has not got the data of (or the builds named): its data into bedrock-data (--force: again, where it has)',
     run: extractBuilds,
   },
-  status: { about: 'each build in versions/, and whether bedrock-data has its data', run: status },
+  status: { about: 'each build in versions/, whether it is supported, and whether bedrock-data has its data', run: status },
 }
 
 function versionStore(): VersionStore {
   return new VersionStore(VERSIONS_DIR, SCHEMAS_DIR)
+}
+
+function supported(): Supported {
+  return new Supported(SUPPORTED_FILE, SCHEMAS_DIR)
 }
 
 function checkBuilds(builds: string[]): void {
@@ -68,16 +74,22 @@ async function trackBuilds({ builds, force, values }: Options): Promise<string[]
   return failed
 }
 
+function support({ builds }: Options): void {
+  if (!builds.length) throw new Error('support: name the releases, as their zips name them (1.26.52.3)')
+  checkBuilds(builds)
+  const store = versionStore()
+  const untracked = builds.filter((b) => !store.read('release', b))
+  if (untracked.length) throw new Error(`not tracked as releases: ${untracked.join(', ')} (pnpm track <build>)`)
+  const added = supported().add(builds)
+  for (const build of builds) console.log(`  ${build}: ${added.includes(build) ? 'added to supported.json' : 'supported already'}`)
+}
+
 async function extractBuilds({ builds, force }: Options): Promise<string[]> {
   checkBuilds(builds)
   const store = versionStore()
   const repo = new DataRepo(BEDROCK_DATA_DIR)
   console.log(`bedrock-data: ${repo.root}`)
-  function pending(build: string): boolean {
-    const version = store.read('release', build)
-    return force || version === undefined || !isExtracted(repo, version)
-  }
-  const todo = builds.length ? builds : store.builds('release').filter(pending)
+  const todo = (builds.length ? builds : supported().builds()).filter((build) => force || !isExtracted(repo, build))
   if (!todo.length) console.log('  nothing to extract')
   const failed = await forEach(
     todo,
@@ -92,12 +104,14 @@ async function extractBuilds({ builds, force }: Options): Promise<string[]> {
 function status(): void {
   const store = versionStore()
   const repo = new DataRepo(BEDROCK_DATA_DIR)
-  const rows = [['channel', 'build', 'version', 'linux', 'windows', 'bedrock-data']]
+  const support = supported()
+  const rows = [['channel', 'build', 'version', 'linux', 'windows', 'supported', 'bedrock-data']]
   for (const channel of CHANNELS)
     for (const build of store.builds(channel)) {
       const json = store.read(channel, build)
-      const data = channel === 'preview' ? '' : !json ? '?' : isExtracted(repo, json) ? 'extracted' : repo.readBuild(build) ? 'OUT OF DATE' : 'MISSING'
-      rows.push([channel, build, json?.version ?? '?', json?.binary.linux ? 'yes' : '-', json?.binary.windows ? 'yes' : '-', data])
+      const isSupported = channel === 'release' && support.has(build)
+      const data = channel === 'preview' ? '' : isExtracted(repo, build) ? 'extracted' : isSupported ? 'MISSING' : '-'
+      rows.push([channel, build, json?.version ?? '?', json?.binary.linux ? 'yes' : '-', json?.binary.windows ? 'yes' : '-', isSupported ? 'yes' : '-', data])
     }
   printTable(rows)
 }
