@@ -35,11 +35,13 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v5
+      # through bedrock-data's write deploy key: it can push there and nowhere else, and its pushes run bedrock-data's
+      # workflows (a GITHUB_TOKEN's would not)
       - name: Check out bedrock-data
         uses: actions/checkout@v5
         with:
           repository: ${{ vars.BEDROCK_DATA_REPO }}
-          token: ${{ secrets.BEDROCK_DATA_TOKEN }}
+          ssh-key: ${{ secrets.BEDROCK_DATA_DEPLOY_KEY }}
           path: bedrock-data
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5

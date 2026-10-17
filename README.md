@@ -58,16 +58,17 @@ pnpm extract 1.16.201.02 1.16.210.05 1.16.220.02 1.17.0.03 1.17.10.04 1.17.30.04
 ## Workflows
 
 - [update](.github/workflows/update.yml): every 6 hours, `pnpm track` into bedrock-data, committed and pushed straight
-  to its main. Run by hand with `builds` to extract those instead (with `force`: again). A push there that touches
-  `release/` has bedrock-data's notify-generator workflow run the generator.
+  to its main. Run by hand with `builds` to extract those instead (with `force`: again). The generator picks a new
+  commit up on its schedule, half an hour later (or at once, through bedrock-data's notify-generator workflow, where
+  that has a token).
 - [CI](.github/workflows/ci.yml): `pnpm verify` and `pnpm test`, against bedrock-data's schemas.
 
 They need:
 
-|                              |                                                                                  |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| variable `BEDROCK_DATA_REPO` | `mc-zuri/bedrock-data`                                                           |
-| secret `BEDROCK_DATA_TOKEN`  | a token that can push to it (fine-grained: Contents read and write on that repo) |
+|                                  |                                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| variable `BEDROCK_DATA_REPO`     | `mc-zuri/bedrock-data`                                                                  |
+| secret `BEDROCK_DATA_DEPLOY_KEY` | the private half of a write deploy key of that repo: it can push there and nowhere else |
 
 ## Development
 
