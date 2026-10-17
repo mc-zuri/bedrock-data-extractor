@@ -1,0 +1,17 @@
+{
+  "build": "1.20.11.01",
+  "version": "1.20.11",
+  "channel": "release",
+  "binary": {
+    "linux": {
+      "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.20.11.01.zip",
+      "sha256": "f1216850386d70d6724a4e1cc314734f09af47d8485526812fb40100bdfcae55",
+      "size": 88510688
+    },
+    "windows": {
+      "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.20.11.01.zip",
+      "sha256": "70270995243cb04d04640ab12998023b2506168696c1cd1898798866c9778697",
+      "size": 54961969
+    }
+  }
+}

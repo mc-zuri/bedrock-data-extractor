@@ -1,0 +1,12 @@
+{
+  "build": "1.21.50.07",
+  "version": "1.21.50",
+  "channel": "release",
+  "binary": {
+    "windows": {
+      "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.21.50.07.zip",
+      "sha256": "4c19c30e642cd0f87f62639c8fc8ae4e5a3666c5e7a8abb7799763097ee17d46",
+      "size": 40277384
+    }
+  }
+}

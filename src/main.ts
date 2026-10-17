@@ -1,8 +1,10 @@
-import { BEDROCK_DATA_DIR, JOBS } from './config.ts'
+import { BEDROCK_DATA_DIR, CACHE_DIR, JOBS, SCHEMAS_DIR, VERSIONS_DIR } from './config.ts'
 import { DataRepo } from './dataRepo.ts'
-import { extract, isComplete, targetName, type Target } from './extract.ts'
+import { extract, isExtracted } from './extract.ts'
 import { fetchLinks } from './mojang.ts'
+import { isTracked, targetName, track, type Target } from './track.ts'
 import { errorMessage, forEach } from './util.ts'
+import { VersionStore } from './versionStore.ts'
 import { CHANNELS, isBuild, isChannel, type Platform } from './versions.ts'
 
 interface Options {
@@ -15,23 +17,32 @@ interface Options {
 interface Step {
   about: string
   /** returns what failed, where some may fail and the others go on */
-  run(repo: DataRepo, options: Options): Promise<string[] | void> | string[] | void
+  run(options: Options): Promise<string[] | void> | string[] | void
 }
 
 const steps: Record<string, Step> = {
-  track: { about: 'what minecraft.net offers now, both channels: each build that is new here, or kept without all it should have, downloaded and extracted', run: track },
-  extract: { about: '<build...> [--channel=preview]: the given builds (as their zips name them: 1.21.42.01), again with --force', run: extractBuilds },
-  status: { about: 'each build kept, its downloads and its data', run: status },
+  track: {
+    about:
+      'what minecraft.net offers now, both channels (or the builds named, as their zips name them: 1.21.42.01; --channel=preview): each build new to versions/, its zips hashed (--force: again)',
+    run: trackBuilds,
+  },
+  extract: {
+    about: 'each release in versions/ that bedrock-data has not got as versions/ has it now (or the builds named): its data into bedrock-data (--force: again)',
+    run: extractBuilds,
+  },
+  status: { about: 'each build in versions/, and whether bedrock-data has its data', run: status },
 }
 
-async function runAll(repo: DataRepo, todo: Target[], force: boolean): Promise<string[]> {
-  console.log(`bedrock-data: ${repo.root}`)
-  const failed = await forEach(todo, JOBS, targetName, (t) => extract(repo, t, force))
-  if (repo.writeVersions()) console.log('  versions.json written')
-  return failed
+function versionStore(): VersionStore {
+  return new VersionStore(VERSIONS_DIR, SCHEMAS_DIR)
 }
 
-async function track(repo: DataRepo, { force }: Options): Promise<string[]> {
+function checkBuilds(builds: string[]): void {
+  const bad = builds.filter((b) => !isBuild(b))
+  if (bad.length) throw new Error(`not an exact build (major.minor.patch.build): ${bad.join(', ')}`)
+}
+
+async function offered(): Promise<Target[]> {
   const targets = new Map<string, Target & { platforms: Platform[] }>()
   for (const link of await fetchLinks()) {
     const key = `${link.channel}/${link.build}`
@@ -41,37 +52,52 @@ async function track(repo: DataRepo, { force }: Options): Promise<string[]> {
   }
   const todo = [...targets.values()]
   console.log(`minecraft.net offers: ${todo.map((t) => `${targetName(t)} (${t.platforms.join(', ')})`).join(', ')}`)
-  const fresh = todo.filter((t) => force || !isComplete(repo, t))
-  if (!fresh.length) console.log('  nothing new')
-  return runAll(repo, fresh, force)
+  return todo
 }
 
-async function extractBuilds(repo: DataRepo, { builds, force, values }: Options): Promise<string[]> {
+async function trackBuilds({ builds, force, values }: Options): Promise<string[]> {
   const channel = values.get('channel') ?? 'release'
   if (!isChannel(channel)) throw new Error(`--channel: ${CHANNELS.join(' or ')}, not ${channel}`)
-  if (!builds.length) throw new Error('extract: name the builds, as their zips name them (1.21.42.01)')
-  const bad = builds.filter((b) => !isBuild(b))
-  if (bad.length) throw new Error(`not an exact build (major.minor.patch.build): ${bad.join(', ')}`)
-  return runAll(
-    repo,
-    builds.map((build) => ({ channel, build })),
-    force,
-  )
+  checkBuilds(builds)
+  const store = versionStore()
+  const targets = builds.length ? builds.map((build) => ({ channel, build })) : await offered()
+  const todo = targets.filter((t) => force || !isTracked(store, t))
+  if (!todo.length) console.log('  nothing new')
+  const failed = await forEach(todo, JOBS, targetName, (t) => track(store, t, force))
+  if (store.writeIndex()) console.log('  versions/versions.json written')
+  return failed
 }
 
-function status(repo: DataRepo): void {
-  const rows = [['channel', 'build', 'version', 'linux', 'windows', 'language']]
+async function extractBuilds({ builds, force }: Options): Promise<string[]> {
+  checkBuilds(builds)
+  const store = versionStore()
+  const repo = new DataRepo(BEDROCK_DATA_DIR)
+  console.log(`bedrock-data: ${repo.root}`)
+  function pending(build: string): boolean {
+    const version = store.read('release', build)
+    return force || version === undefined || !isExtracted(repo, version)
+  }
+  const todo = builds.length ? builds : store.builds('release').filter(pending)
+  if (!todo.length) console.log('  nothing to extract')
+  const failed = await forEach(
+    todo,
+    JOBS,
+    (build) => `release/${build}`,
+    (build) => extract(repo, store, build, force, CACHE_DIR),
+  )
+  if (repo.writeVersions()) console.log('  versions.json written')
+  return failed
+}
+
+function status(): void {
+  const store = versionStore()
+  const repo = new DataRepo(BEDROCK_DATA_DIR)
+  const rows = [['channel', 'build', 'version', 'linux', 'windows', 'bedrock-data']]
   for (const channel of CHANNELS)
-    for (const build of repo.builds(channel)) {
-      const json = repo.readBuild(channel, build)
-      rows.push([
-        channel,
-        build,
-        json?.version ?? '?',
-        json?.binary.linux ? 'yes' : '-',
-        json?.binary.windows ? 'yes' : '-',
-        channel === 'preview' ? '' : json?.data?.language && repo.hasLanguage(build) ? `from ${json.data.language.from}` : 'MISSING',
-      ])
+    for (const build of store.builds(channel)) {
+      const json = store.read(channel, build)
+      const data = channel === 'preview' ? '' : !json ? '?' : isExtracted(repo, json) ? 'extracted' : repo.readBuild(build) ? 'OUT OF DATE' : 'MISSING'
+      rows.push([channel, build, json?.version ?? '?', json?.binary.linux ? 'yes' : '-', json?.binary.windows ? 'yes' : '-', data])
     }
   printTable(rows)
 }
@@ -104,7 +130,7 @@ async function main(args: string[]): Promise<number> {
       force: rest.includes('--force'),
       values: new Map(rest.filter((a) => /^--\w+=/.test(a)).map((a) => [a.slice(2, a.indexOf('=')), a.slice(a.indexOf('=') + 1)])),
     }
-    const failed = (await steps[name].run(new DataRepo(BEDROCK_DATA_DIR), options)) ?? []
+    const failed = (await steps[name].run(options)) ?? []
     if (!failed.length) return 0
     console.error(`failed: ${failed.join(', ')}`)
     return 1

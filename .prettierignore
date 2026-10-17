@@ -2,3 +2,5 @@ node_modules/
 pnpm-lock.yaml
 cache/
 bedrock-data/
+# written by pnpm track, as JSON.stringify writes it
+versions/

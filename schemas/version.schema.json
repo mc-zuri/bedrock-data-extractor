@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/mc-zuri/bedrock-data-extractor/schemas/version.schema.json",
+  "title": "versions/<channel>/<build>.json: a build, and each platform's zip of it",
+  "type": "object",
+  "required": ["build", "version", "channel", "binary"],
+  "additionalProperties": false,
+  "properties": {
+    "build": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-preview\\.\\d+)?$" },
+    "channel": { "enum": ["release", "preview"] },
+    "binary": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "linux": { "$ref": "#/definitions/download" },
+        "windows": { "$ref": "#/definitions/download" }
+      }
+    }
+  },
+  "definitions": {
+    "download": {
+      "type": "object",
+      "required": ["url", "sha256", "size"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "pattern": "^https://www\\.minecraft\\.net/bedrockdedicatedserver/bin-(linux|win)(-preview)?/bedrock-server-\\d+\\.\\d+\\.\\d+\\.\\d+\\.zip$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

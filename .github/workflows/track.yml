@@ -1,0 +1,65 @@
+# What minecraft.net offers, into versions/: every 6 hours, each build that is new (both channels) has its zips hashed,
+# and the result is committed to this repo's main. That push runs the extract workflow, which extracts each new
+# release into bedrock-data. Run by hand with builds (1.21.42.01 1.26.52.3) to track those instead, again with force.
+name: track
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      builds:
+        description: 'Builds to track, as their zips name them (space-separated); empty: what minecraft.net offers now'
+        required: false
+        default: ''
+      channel:
+        description: "The builds' channel"
+        type: choice
+        options: [release, preview]
+        default: release
+      force:
+        description: 'Hash their zips again even where tracked already'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: track
+  cancel-in-progress: false
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # through this repo's own write deploy key: a push made with it runs the extract workflow (a GITHUB_TOKEN's would not)
+      - uses: actions/checkout@v5
+        with:
+          ssh-key: ${{ secrets.EXTRACTOR_DEPLOY_KEY }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Track
+        env:
+          BUILDS: ${{ inputs.builds }}
+          CHANNEL: ${{ inputs.channel || 'release' }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: pnpm track $BUILDS --channel="$CHANNEL" $FORCE
+      - name: Commit to main
+        run: |
+          git add versions
+          if git diff --cached --quiet; then
+            echo 'nothing new'
+            exit 0
+          fi
+          builds=$(git diff --cached --name-only -- versions | grep -oE '(release|preview)/[0-9.]+[0-9]' | sort -u | paste -sd ' ' -)
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m "track ${builds:-versions.json}"
+          git pull -q --rebase
+          git push -q

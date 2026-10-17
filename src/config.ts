@@ -1,4 +1,4 @@
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -14,7 +14,10 @@ function positiveIntSetting(name: string, fallback: number): number {
   return value
 }
 
-// the bedrock-data checkout every step writes into
+// the builds minecraft.net has offered, kept in this repo, and the schemas of its files
+export const VERSIONS_DIR = join(ROOT, 'versions')
+export const SCHEMAS_DIR = join(ROOT, 'schemas')
+// the bedrock-data checkout the extract step writes into
 export const BEDROCK_DATA_DIR = pathSetting('BEDROCK_DATA_DIR', '../bedrock-data')
 // a build's zips while it is extracted
 export const CACHE_DIR = pathSetting('CACHE_DIR', 'cache')

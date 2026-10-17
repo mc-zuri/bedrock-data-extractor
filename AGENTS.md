@@ -1,21 +1,23 @@
 # AGENTS.md
 
-Read [README.md](README.md) first, and bedrock-data's README: it is the format of everything this writes.
+Read [README.md](README.md) first, and bedrock-data's README: it is the format of everything extract writes.
 
 ## Invariants
 
-- **bedrock-data is written only by this.** A wrong value is fixed here and the build extracted again
-  (`pnpm extract <build> --force`). Never hand-edit bedrock-data, never add an override layer of corrections: where
-  extracted data disagrees with another source, find out why and fix the extraction, or document the disagreement.
-- **A run changes bedrock-data only where the game says otherwise.** No timestamps, no extractor version, no
+- **`versions/` is written only by `pnpm track`, bedrock-data only by `pnpm extract`.** A wrong value is fixed here and
+  extracted again (a push of the fix to main does so). Never hand-edit either, never add an override layer of
+  corrections: where extracted data disagrees with another source, find out why and fix the extraction, or document
+  the disagreement.
+- **A run changes files only where the game says otherwise.** No timestamps, no extractor version, no
   machine-dependent bytes (gzip is rewritten only where its decompressed text changed). `pnpm track` with nothing new,
-  or `pnpm extract` of a kept build, must leave `git -C ../bedrock-data status` clean.
+  or `pnpm extract` of a release bedrock-data has, must leave both repos' `git status` clean.
 - **Exact builds only.** A build is what its zip is named (`1.21.42.01`, never `1.21.42.1`); a zip that is not at its
   URL is a missing platform, never stood in for by a redirect or another build. The channel is the download's, never
-  guessed from the number.
-- **The schemas are bedrock-data's.** Every write is checked against `BEDROCK_DATA_DIR/schemas/`; the tests copy them
-  from there. A new field or file changes bedrock-data's README and schemas together with the code that writes it.
-- **Previews are kept by their downloads only.** Data is extracted from releases.
+  guessed from the number. `extract` reads only the zip `versions/` hashed.
+- **Schemas first.** `versions/` is checked against `schemas/` here; bedrock-data's files against
+  `BEDROCK_DATA_DIR/schemas/` (the tests copy them from there). A new field or file changes its schema, and for
+  bedrock-data its README, together with the code that writes it.
+- **Previews are tracked, never extracted.**
 
 ## Conventions
 

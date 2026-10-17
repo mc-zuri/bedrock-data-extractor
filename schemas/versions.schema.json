@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/mc-zuri/bedrock-data-extractor/schemas/versions.schema.json",
+  "title": "versions/versions.json: every build minecraft.net has offered that is kept, by channel, newest first",
+  "type": "object",
+  "required": ["release", "preview"],
+  "additionalProperties": false,
+  "properties": {
+    "release": { "$ref": "#/definitions/channel" },
+    "preview": { "$ref": "#/definitions/channel" }
+  },
+  "definitions": {
+    "build": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$" },
+    "channel": {
+      "type": "object",
+      "required": ["builds"],
+      "additionalProperties": false,
+      "properties": {
+        "latest": { "$ref": "#/definitions/build" },
+        "builds": { "type": "array", "items": { "$ref": "#/definitions/build" }, "uniqueItems": true }
+      }
+    }
+  }
+}

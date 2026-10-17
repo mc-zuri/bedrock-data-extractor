@@ -1,0 +1,79 @@
+# Each tracked release into bedrock-data, on a push to main that changes what is tracked or how it is extracted. A push
+# that changes the extraction (src/, the dependencies) extracts every release again; one that only tracks new builds
+# extracts the releases bedrock-data has not got as versions/ has them. Only what changes is written, and the commit
+# goes straight to bedrock-data's main. Run by hand with builds to extract those, again with force.
+name: extract
+
+on:
+  push:
+    branches: [main]
+    paths: ['versions/**', 'src/**', 'package.json', 'pnpm-lock.yaml']
+  workflow_dispatch:
+    inputs:
+      builds:
+        description: 'Releases to extract, as their zips name them (space-separated); empty: each one bedrock-data lacks'
+        required: false
+        default: ''
+      force:
+        description: 'Extract them again even where bedrock-data has them'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bedrock-data
+  cancel-in-progress: false
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # through bedrock-data's write deploy key: it can push there and nowhere else, and its pushes run bedrock-data's
+      # workflows (a GITHUB_TOKEN's would not)
+      - name: Check out bedrock-data
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ vars.BEDROCK_DATA_REPO }}
+          ssh-key: ${{ secrets.BEDROCK_DATA_DEPLOY_KEY }}
+          path: bedrock-data
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Extract
+        env:
+          BEDROCK_DATA_DIR: bedrock-data
+          BUILDS: ${{ inputs.builds }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BUILDS" ]; then
+            pnpm extract $BUILDS $FORCE
+          elif [ "$GITHUB_EVENT_NAME" = push ] && ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- src package.json pnpm-lock.yaml; then
+            # the extraction changed (or the push cannot be compared): every release again
+            pnpm extract --force
+          else
+            pnpm extract $FORCE
+          fi
+      - name: Commit to bedrock-data
+        working-directory: bedrock-data
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'bedrock-data already says this'
+            exit 0
+          fi
+          builds=$(git diff --cached --name-only | grep -oE '^release/[^/]+' | sort -u | paste -sd ' ' -)
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m "${builds:-versions.json}" -m "Extracted by https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          git pull -q --rebase
+          git push -q

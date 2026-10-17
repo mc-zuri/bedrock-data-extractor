@@ -1,56 +1,39 @@
-// A build into bedrock-data: each platform's zip downloaded and hashed (build.json), and for a release its data read
-// out of one of them (linux's where both have it). Its zips are deleted once it is done; a build that failed keeps
-// those it downloaded, for the next try.
+// A tracked release into bedrock-data: its data read out of one of its zips (linux's where both have one), checked to
+// be the zip versions/ hashed, and its version file with what was extracted as build.json. Its zip is deleted once it
+// is done; a build that failed keeps it, for the next try.
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { CACHE_DIR } from './config.ts'
 import type { BuildJson, DataRepo } from './dataRepo.ts'
-import { download, type Zip } from './download.ts'
+import { download } from './download.ts'
 import { LANGUAGE_FILE, readLanguage } from './language.ts'
-import { PLATFORMS, versionOf, zipUrl, type Channel, type Platform } from './versions.ts'
+import type { VersionJson, VersionStore } from './versionStore.ts'
+import { PLATFORMS } from './versions.ts'
 
-export interface Target {
-  channel: Channel
-  build: string
-  /** the platforms minecraft.net is known to offer it for (the download links'); unknown for a build named by hand */
-  platforms?: Platform[]
+/** Extracted from the zips versions/ has for it now, with all a release's data. */
+export function isExtracted(repo: DataRepo, version: VersionJson): boolean {
+  const json = repo.readBuild(version.build)
+  return json !== undefined && JSON.stringify(json.binary) === JSON.stringify(version.binary) && json.data.language !== undefined && repo.hasLanguage(version.build)
 }
 
-export function targetName(t: Target): string {
-  return `${t.channel}/${t.build}`
-}
-
-/** Kept with all it should have: each known platform's download, and a release's data. */
-export function isComplete(repo: DataRepo, t: Target): boolean {
-  const json = repo.readBuild(t.channel, t.build)
-  if (!json || !Object.keys(json.binary).length) return false
-  if (t.platforms?.some((p) => !json.binary[p])) return false
-  return t.channel === 'preview' || (json.data?.language !== undefined && repo.hasLanguage(t.build))
-}
-
-/** What changed, undefined where it was complete already (and not `force`d). */
-export async function extract(repo: DataRepo, t: Target, force: boolean): Promise<string | undefined> {
-  if (!force && isComplete(repo, t)) return undefined
-  const cache = join(CACHE_DIR, t.channel, t.build)
-  const zips = new Map<Platform, Zip>()
-  for (const platform of PLATFORMS) {
-    const zip = await download(zipUrl(t.build, t.channel, platform), join(cache, `${platform}.zip`))
-    if (zip) zips.set(platform, zip)
+/** What changed, undefined where it was extracted already (and not `force`d). `cache`: where its zip is downloaded to. */
+export async function extract(repo: DataRepo, store: VersionStore, build: string, force: boolean, cache: string): Promise<string | undefined> {
+  const version = store.read('release', build)
+  if (!version) throw new Error(`release ${build} is not tracked: pnpm track ${build}`)
+  if (!force && isExtracted(repo, version)) return undefined
+  const from = PLATFORMS.find((p) => version.binary[p])
+  const tracked = from && version.binary[from]
+  if (!from || !tracked) throw new Error(`versions/release/${build}.json has no zip`)
+  const dir = join(cache, 'release', build)
+  const zip = await download(tracked.url, join(dir, `${from}.zip`))
+  if (!zip) throw new Error(`${tracked.url} is gone`)
+  if (zip.sha256 !== tracked.sha256) {
+    rmSync(dir, { recursive: true, force: true })
+    throw new Error(`${tracked.url} is not the zip tracked: sha256 ${zip.sha256}, not ${tracked.sha256} (pnpm track ${build} --force, if minecraft.net changed it)`)
   }
-  if (!zips.size) throw new Error(`minecraft.net has no ${t.channel} zip of ${t.build} (${zipUrl(t.build, t.channel, 'linux')})`)
-  for (const platform of t.platforms ?? [])
-    if (!zips.has(platform)) throw new Error(`the download links offer ${platform}'s ${t.build}, which is not at ${zipUrl(t.build, t.channel, platform)}`)
-
-  const json: BuildJson = { build: t.build, version: versionOf(t.build, t.channel), channel: t.channel, binary: {} }
-  for (const [platform, zip] of zips) json.binary[platform] = { url: zipUrl(t.build, t.channel, platform), sha256: zip.sha256, size: zip.size }
   const changed: string[] = []
-  if (t.channel === 'release') {
-    // zips is in PLATFORMS' order: linux's where there is one
-    const [from, zip] = [...zips][0]
-    if (repo.writeLanguage(t.build, await readLanguage(zip.file))) changed.push(LANGUAGE_FILE)
-    json.data = { language: { file: LANGUAGE_FILE, from } }
-  }
+  if (repo.writeLanguage(build, await readLanguage(zip.file))) changed.push(LANGUAGE_FILE)
+  const json: BuildJson = { ...version, channel: 'release', data: { language: { file: LANGUAGE_FILE, from } } }
   if (repo.writeBuild(json)) changed.unshift('build.json')
-  rmSync(cache, { recursive: true, force: true })
-  return changed.length ? `${changed.join(', ')} written (${[...zips.keys()].join(', ')})` : 'unchanged'
+  rmSync(dir, { recursive: true, force: true })
+  return changed.length ? `${changed.join(', ')} written (from ${from})` : 'unchanged'
 }

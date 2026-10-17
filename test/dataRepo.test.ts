@@ -3,7 +3,8 @@ import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { gunzipSync, gzipSync } from 'node:zlib'
-import { DataRepo, gzip, type BuildJson } from '../src/dataRepo.ts'
+import { DataRepo, type BuildJson } from '../src/dataRepo.ts'
+import { gzip } from '../src/files.ts'
 import type { Language } from '../src/language.ts'
 import { emptyDataRepo } from './helpers.ts'
 
@@ -44,26 +45,20 @@ void test('a file is written only where what it says changed', () => {
 
 void test('what the schemas refuse is not written', () => {
   const repo = new DataRepo(emptyDataRepo())
-  assert.throws(() => repo.writeBuild({ ...release('1.26.52.3'), build: '1.26.52' }), /schemas\/build\.schema\.json/)
-  assert.throws(() => repo.writeBuild({ ...release('1.26.52.3'), binary: {} }), /schemas\/build\.schema\.json/)
-  assert.throws(() => repo.writeLanguage('1.26.52.3', { locale: 'en_US', packs: { chemistry: {} } }), /schemas\/language\.schema\.json/)
-  assert.deepEqual(repo.builds('release'), [])
+  assert.throws(() => repo.writeBuild({ ...release('1.26.52.3'), build: '1.26.52' }), /build\.schema\.json/)
+  assert.throws(() => repo.writeBuild({ ...release('1.26.52.3'), binary: {} }), /build\.schema\.json/)
+  assert.throws(() => repo.writeBuild({ ...release('1.26.52.3'), version: '1.26.52-preview.3' }), /build\.schema\.json/)
+  assert.throws(() => repo.writeLanguage('1.26.52.3', { locale: 'en_US', packs: { chemistry: {} } }), /language\.schema\.json/)
+  assert.deepEqual(repo.builds(), [])
 })
 
-void test('versions.json lists the builds there are, newest first', () => {
+void test('versions.json lists the releases there are, newest first', () => {
   const repo = new DataRepo(emptyDataRepo())
   for (const build of ['1.21.42.01', '1.26.52.3', '1.21.100.6']) repo.writeBuild(release(build))
-  repo.writeBuild({
-    build: '1.26.70.20',
-    version: '1.26.70-preview.20',
-    channel: 'preview',
-    binary: { windows: { url: 'https://www.minecraft.net/bedrockdedicatedserver/bin-win-preview/bedrock-server-1.26.70.20.zip', sha256: SHA, size: 2 } },
-  })
   assert.equal(repo.writeVersions(), true)
   assert.deepEqual(JSON.parse(readFileSync(join(repo.root, 'versions.json'), 'utf8')), {
     formatVersion: 1,
     release: { latest: '1.26.52.3', builds: ['1.26.52.3', '1.21.100.6', '1.21.42.01'] },
-    preview: { latest: '1.26.70.20', builds: ['1.26.70.20'] },
   })
   assert.equal(repo.writeVersions(), false)
 })
