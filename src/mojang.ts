@@ -4,7 +4,7 @@ import { isBuild, zipUrl, type Channel, type Platform } from './versions.ts'
 
 export const DOWNLOAD_LINKS = 'https://net-secondary.web.minecraft-services.net/api/v1.0/download/links'
 
-export interface Link {
+interface Link {
   channel: Channel
   platform: Platform
   build: string

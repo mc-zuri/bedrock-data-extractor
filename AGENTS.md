@@ -1,6 +1,7 @@
 # AGENTS.md
 
-Read [README.md](README.md) first, and bedrock-data's README: it is the format of everything extract writes.
+Read [README.md](README.md) and [docs/](docs) first, and bedrock-data's README: it is the format of everything extract
+writes.
 
 ## Invariants
 

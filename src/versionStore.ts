@@ -1,13 +1,12 @@
 // The builds minecraft.net has offered, kept in this repo (versions/, as EndstoneMC/bedrock-server-data keeps them):
 // each build's downloads in versions/<channel>/<build>.json, and versions/versions.json, each channel's builds newest
-// first. pnpm track writes them; a push of a new one to main has the extract workflow extract each new release into
-// bedrock-data.
+// first. Only pnpm track writes them; a release here is exported once it is supported (supported.ts).
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { keepJson, Schemas } from './files.ts'
 import { CHANNELS, compareVersions, isBuild, type Channel, type Platform } from './versions.ts'
 
-export interface Binary {
+interface Binary {
   url: string
   sha256: string
   size: number

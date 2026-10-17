@@ -5,12 +5,12 @@ import { Readable, Transform, Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream } from 'node:stream/web'
 
-export interface Hashed {
+interface Hashed {
   sha256: string
   size: number
 }
 
-export interface Zip extends Hashed {
+interface Zip extends Hashed {
   file: string
 }
 

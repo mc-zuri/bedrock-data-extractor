@@ -34,7 +34,7 @@ function readEntry(zip: ZipFile, entry: Entry): Promise<Buffer> {
 }
 
 /** Each pack's en_US.lang in `zip`, by pack, as the zip has it. */
-export async function langFiles(zip: string): Promise<Map<string, Buffer>> {
+async function langFiles(zip: string): Promise<Map<string, Buffer>> {
   const file = await openZip(zip)
   const files = new Map<string, Buffer>()
   await new Promise<void>((resolve, reject) => {

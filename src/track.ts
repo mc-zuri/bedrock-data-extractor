@@ -1,5 +1,5 @@
 // A build into versions/: each platform's zip of it hashed as it downloads (a platform minecraft.net has no zip of is
-// left out). Nothing is extracted here: that is the extract step's, run on the push of what this writes.
+// left out). Nothing is exported here: a new release is handed to the support workflow.
 import { hashZip } from './download.ts'
 import type { VersionStore, VersionJson } from './versionStore.ts'
 import { PLATFORMS, versionOf, zipUrl, type Channel, type Platform } from './versions.ts'

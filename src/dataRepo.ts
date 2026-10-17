@@ -8,7 +8,7 @@ import { LANGUAGE_FILE, type Language } from './language.ts'
 import type { VersionJson } from './versionStore.ts'
 import { compareVersions, isBuild, type Platform } from './versions.ts'
 
-export const FORMAT_VERSION = 1
+const FORMAT_VERSION = 1
 
 /** A release's version file (versions/release/<build>.json), and what was extracted from which of its zips */
 export interface BuildJson extends VersionJson {

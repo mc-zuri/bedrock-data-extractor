@@ -1,7 +1,7 @@
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 function pathSetting(name: string, fallback: string): string {
   const value = process.env[name] || fallback
