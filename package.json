@@ -1,0 +1,33 @@
+{
+  "name": "bedrock-data-extractor",
+  "private": true,
+  "description": "Tracks every Bedrock Dedicated Server build minecraft.net offers and extracts what each says into bedrock-data",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.13.0",
+  "scripts": {
+    "track": "node --env-file-if-exists=.env src/main.ts track",
+    "extract": "node --env-file-if-exists=.env src/main.ts extract",
+    "status": "node --env-file-if-exists=.env src/main.ts status",
+    "typecheck": "tsc",
+    "lint": "oxlint --type-aware --deny-warnings src test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check",
+    "test": "node --env-file-if-exists=.env --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.5",
+    "@types/yauzl": "3.4.0",
+    "oxlint": "1.86.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "prettier": "3.9.9",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,6 @@
+node_modules/
+.env
+# CACHE_DIR's default: the zips of the builds being extracted
+/cache/
+# where the workflows check out bedrock-data
+/bedrock-data/

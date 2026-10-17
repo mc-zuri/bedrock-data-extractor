@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # the tests check what they write against bedrock-data's schemas
+      - name: Check out bedrock-data
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ vars.BEDROCK_DATA_REPO }}
+          path: bedrock-data
+          sparse-checkout: schemas
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm test
+        env:
+          BEDROCK_DATA_DIR: bedrock-data
