@@ -6,12 +6,14 @@
     "linux": {
       "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.17.0.03.zip",
       "sha256": "d13388206670ada498d93c0bbe8b81bba326e516e9186a953adc300a5a671ccc",
-      "size": 29792631
+      "size": 29792631,
+      "supported": true
     },
     "windows": {
       "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.17.0.03.zip",
       "sha256": "23e784f7fe328779433f789f4a215a48d804c80e24c645740c93295159ed1fcc",
-      "size": 39955381
+      "size": 39955381,
+      "supported": true
     }
   }
 }

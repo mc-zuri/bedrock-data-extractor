@@ -6,7 +6,7 @@ name: extract
 on:
   push:
     branches: [main]
-    paths: ['supported.json', 'src/**', 'package.json', 'pnpm-lock.yaml']
+    paths: ['versions/release/**', 'src/**', 'package.json', 'pnpm-lock.yaml']
   workflow_dispatch:
     inputs:
       builds:

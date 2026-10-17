@@ -14,9 +14,23 @@ function version(build: string, channel: Channel, platforms: ('linux' | 'windows
     build,
     version: channel === 'release' ? `${major}.${minor}.${patch}` : `${major}.${minor}.${patch}-preview.${Number(number)}`,
     channel,
-    binary: Object.fromEntries(platforms.map((p) => [p, { url: zipUrl(build, channel, p), sha256: 'b'.repeat(64), size: 9 }])),
+    binary: Object.fromEntries(platforms.map((p) => [p, { url: zipUrl(build, channel, p), sha256: 'b'.repeat(64), size: 9, supported: false }])),
   }
 }
+
+void test('a release is supported once a platform of it is', () => {
+  const store = new VersionStore(join(tempDir(), 'versions'), SCHEMAS_DIR)
+  store.write(version('1.26.52.3', 'release'))
+  store.write(version('1.26.51.1', 'release'))
+  assert.deepEqual(store.supportedBuilds(), [])
+  assert.equal(store.setSupported('1.26.51.1', ['windows']), true)
+  assert.equal(store.setSupported('1.26.51.1', ['windows']), false)
+  assert.deepEqual(store.supportedBuilds(), ['1.26.51.1'])
+  assert.deepEqual(store.read('release', '1.26.51.1')?.binary, {
+    linux: { url: zipUrl('1.26.51.1', 'release', 'linux'), sha256: 'b'.repeat(64), size: 9, supported: false },
+    windows: { url: zipUrl('1.26.51.1', 'release', 'windows'), sha256: 'b'.repeat(64), size: 9, supported: true },
+  })
+})
 
 void test("a build's file is written only where it changed, and as the schema says", () => {
   const store = new VersionStore(join(tempDir(), 'versions'), SCHEMAS_DIR)

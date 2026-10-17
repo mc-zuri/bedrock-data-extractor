@@ -14,7 +14,7 @@ stripping): there is no build step. The tests download nothing: a test that need
 | `src/download.ts`     | a zip, exactly at its URL, hashed while it downloads                      |
 | `src/versionStore.ts` | `versions/`: each tracked build's zips                                    |
 | `src/track.ts`        | a build into `versions/`                                                  |
-| `src/supported.ts`    | `supported.json`: the releases exported                                   |
+| `src/support.ts`      | a release made supported, platform by platform                            |
 | `src/language.ts`     | each pack's `en_US.lang` out of a zip                                     |
 | `src/lang.ts`         | a `.lang` file's keys and strings (bedrock-data README: language.json.gz) |
 | `src/checks.ts`       | what exported data must hold before it is written                         |
@@ -24,7 +24,7 @@ stripping): there is no build step. The tests download nothing: a test that need
 
 ## Fixing an export
 
-A wrong value is fixed here, never by editing bedrock-data, `versions/` or `supported.json` by hand, and never by a
+A wrong value is fixed here, never by editing bedrock-data or `versions/` by hand, and never by a
 layer of hardcoded corrections. Merge the fix, then export the releases it changes again: the extract workflow by hand
 with `builds` and `force` (locally, `pnpm extract <builds> --force`).
 

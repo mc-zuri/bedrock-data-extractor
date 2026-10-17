@@ -22,12 +22,13 @@
   "definitions": {
     "download": {
       "type": "object",
-      "required": ["url", "sha256", "size"],
+      "required": ["url", "sha256", "size", "supported"],
       "additionalProperties": false,
       "properties": {
         "url": { "type": "string", "pattern": "^https://www\\.minecraft\\.net/bedrockdedicatedserver/bin-(linux|win)(-preview)?/bedrock-server-\\d+\\.\\d+\\.\\d+\\.\\d+\\.zip$" },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "size": { "type": "integer", "minimum": 1 }
+        "size": { "type": "integer", "minimum": 1 },
+        "supported": { "type": "boolean", "description": "the export works from this zip (pnpm support); a preview's never is" }
       }
     }
   }

@@ -4,5 +4,3 @@ cache/
 bedrock-data/
 # written by pnpm track, as JSON.stringify writes it
 versions/
-# written by pnpm support, as JSON.stringify writes it
-supported.json

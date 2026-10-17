@@ -1,8 +1,11 @@
-import { cpSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { crc32, deflateRawSync } from 'node:zlib'
-import { BEDROCK_DATA_DIR } from '../src/config.ts'
+import { BEDROCK_DATA_DIR, SCHEMAS_DIR } from '../src/config.ts'
+import { VersionStore, type VersionJson } from '../src/versionStore.ts'
+import { zipUrl, type Platform } from '../src/versions.ts'
 
 /** A zip of `files` (name -> content), each deflated: as a server zip is. */
 export function writeZip(file: string, files: Record<string, string | Buffer>): void {
@@ -54,4 +57,32 @@ export function emptyDataRepo(): string {
   const root = tempDir()
   cpSync(join(BEDROCK_DATA_DIR, 'schemas'), join(root, 'schemas'), { recursive: true })
   return root
+}
+
+/** A vanilla en_US.lang with as many strings as a release's has (checks.ts) */
+export const VANILLA = Array.from({ length: 6000 }, (_, i) => `tile.block_${i}.name=Block ${i}`).join('\n')
+
+/**
+ * A tracked release whose zips are already in the cache, as finished downloads leave them: nothing is fetched.
+ * `zips`: each platform's vanilla en_US.lang; `supported`: the platforms marked so; `wrongSha`: those tracked with
+ * another zip's sha256.
+ */
+export function cachedRelease(
+  build: string,
+  zips: Partial<Record<Platform, string>>,
+  supported: Platform[] = [],
+  wrongSha: Platform[] = [],
+): { store: VersionStore; cache: string } {
+  const cache = tempDir()
+  const store = new VersionStore(join(tempDir(), 'versions'), SCHEMAS_DIR)
+  const binary: VersionJson['binary'] = {}
+  for (const [platform, vanilla] of Object.entries(zips) as [Platform, string][]) {
+    const zip = join(cache, 'release', build, `${platform}.zip`)
+    mkdirSync(dirname(zip), { recursive: true })
+    writeZip(zip, { 'resource_packs/vanilla/texts/en_US.lang': vanilla, 'resource_packs/chemistry/texts/en_US.lang': 'item.element_1.name=Hydrogen\n' })
+    const sha256 = wrongSha.includes(platform) ? 'd'.repeat(64) : createHash('sha256').update(readFileSync(zip)).digest('hex')
+    binary[platform] = { url: zipUrl(build, 'release', platform), sha256, size: statSync(zip).size, supported: supported.includes(platform) }
+  }
+  store.write({ build, version: build.split('.').slice(0, 3).join('.'), channel: 'release', binary })
+  return { store, cache }
 }

@@ -5,14 +5,16 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { keepGzipped, keepJson, Schemas } from './files.ts'
 import { LANGUAGE_FILE, type Language } from './language.ts'
-import type { VersionJson } from './versionStore.ts'
 import { compareVersions, isBuild, type Platform } from './versions.ts'
 
 const FORMAT_VERSION = 1
 
-/** A release's version file (versions/release/<build>.json), and what was extracted from which of its zips */
-export interface BuildJson extends VersionJson {
+/** A release, each platform's zip of it (as versions/release/<build>.json has them), and what was extracted from which */
+export interface BuildJson {
+  build: string
+  version: string
   channel: 'release'
+  binary: Partial<Record<Platform, { url: string; sha256: string; size: number }>>
   data: {
     language?: { file: typeof LANGUAGE_FILE; from: Platform }
   }

@@ -1,8 +1,0 @@
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/mc-zuri/bedrock-data-extractor/schemas/supported.schema.json",
-  "title": "supported.json: the releases this extractor exports to bedrock-data, newest first",
-  "type": "array",
-  "items": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$" },
-  "uniqueItems": true
-}

@@ -1,6 +1,7 @@
-# A tracked release made supported: added to supported.json, exported (into a copy of bedrock-data, kept nowhere but as
-# this run's artifact) and tested. Where that works, a pull request adds it to supported.json; merging it runs the
-# extract workflow, which exports it into bedrock-data. Where it does not, an issue asks for its support, with the log.
+# A tracked release made supported, platform by platform: each platform's zip exported and checked (pnpm support),
+# then exported (into a copy of bedrock-data, kept nowhere but as this run's artifact) and tested. The platforms that
+# pass are marked "supported" in versions/release/<build>.json by a pull request; merging it runs the extract workflow,
+# which exports the release into bedrock-data. A platform that fails gets an issue asking for its support, with the log.
 # Run by the track workflow for each new release, or by hand.
 name: support
 
@@ -31,7 +32,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      # main as it is when the run starts: the build track just committed, and the releases supported since
+      # main as it is when the run starts: the build track just committed
       - uses: actions/checkout@v5
         with:
           ref: main
@@ -47,12 +48,20 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Add to supported.json, export and test
-        id: try
+      - name: Try each platform
+        id: support
         shell: bash
         run: |
           set -o pipefail
-          { pnpm support "$BUILD" && pnpm extract "$BUILD" --force && pnpm test; } 2>&1 | tee support.log
+          pnpm support "$BUILD" 2>&1 | tee support.log || echo 'failed=true' >> "$GITHUB_OUTPUT"
+          if ! git diff --quiet -- "versions/release/$BUILD.json"; then echo 'marked=true' >> "$GITHUB_OUTPUT"; fi
+      - name: Export and test
+        id: test
+        if: steps.support.outputs.marked == 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          { pnpm extract "$BUILD" --force && pnpm test; } 2>&1 | tee -a support.log
       - name: Keep what it exported
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,29 +72,26 @@ jobs:
             bedrock-data/release/${{ inputs.build }}/
           if-no-files-found: ignore
       - name: Open the pull request
-        if: success()
+        if: steps.support.outputs.marked == 'true' && steps.test.outcome == 'success'
         run: |
-          if git diff --quiet -- supported.json; then
-            echo "$BUILD is supported already"
-            exit 0
-          fi
+          platforms=$(grep -oE "release/$BUILD: supported on .*\(" support.log | sed -E 's/.*supported on (.*) \(/\1/')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git switch -c "$BRANCH"
-          git add supported.json
-          git commit -q -m "Support $BUILD"
+          git add "versions/release/$BUILD.json"
+          git commit -q -m "Support $BUILD on $platforms"
           git push -q --force origin "$BRANCH"
           exported=$(grep -E "release/$BUILD: " support.log | sed 's/^ *//')
-          body=$(printf 'Exports and passes the tests: %s\n\n```\n%s\n```\n\nMerging this runs the extract workflow, which exports it into bedrock-data. What it exported is the run'"'"'s artifact: %s\n' "$BUILD" "$exported" "$RUN_URL")
+          body=$(printf 'Exports and passes the tests on %s.\n\n```\n%s\n```\n\nMerging this runs the extract workflow, which exports it into bedrock-data. What it exported is the run'"'"'s artifact: %s\n' "$platforms" "$exported" "$RUN_URL")
           if [ "$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null)" = OPEN ]; then
             gh pr edit "$BRANCH" --body "$body"
           else
             gh pr create --base main --head "$BRANCH" --title "Support BDS $BUILD" --body "$body"
           fi
       - name: Open an issue
-        if: failure() && steps.try.outcome == 'failure'
+        if: always() && (steps.support.outputs.failed == 'true' || steps.test.outcome == 'failure')
         run: |
-          body=$(printf 'Exporting or testing %s failed: %s\n\n```\n%s\n```\n' "$BUILD" "$RUN_URL" "$(tail -n 60 support.log)")
+          body=$(printf 'Supporting %s failed: %s\n\n```\n%s\n```\n' "$BUILD" "$RUN_URL" "$(tail -n 60 support.log)")
           issue=$(gh issue list --state open --search "\"Support BDS $BUILD\" in:title" --json number --jq '.[0].number // empty')
           if [ -n "$issue" ]; then
             gh issue comment "$issue" --body "$body"

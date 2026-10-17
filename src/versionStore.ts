@@ -1,15 +1,17 @@
 // The builds minecraft.net has offered, kept in this repo (versions/, as EndstoneMC/bedrock-server-data keeps them):
 // each build's downloads in versions/<channel>/<build>.json, and versions/versions.json, each channel's builds newest
-// first. Only pnpm track writes them; a release here is exported once it is supported (supported.ts).
+// first. pnpm track writes them; pnpm support marks the platforms a release is exported from (support.ts).
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { keepJson, Schemas } from './files.ts'
-import { CHANNELS, compareVersions, isBuild, type Channel, type Platform } from './versions.ts'
+import { CHANNELS, compareVersions, isBuild, PLATFORMS, type Channel, type Platform } from './versions.ts'
 
 interface Binary {
   url: string
   sha256: string
   size: number
+  /** the export works from this zip (pnpm support): only a supported platform's zip is exported */
+  supported: boolean
 }
 
 /** A build, and each platform's zip of it */
@@ -47,6 +49,25 @@ export class VersionStore {
       .map((name) => name.replace(/\.json$/, ''))
       .filter(isBuild)
       .sort((a, b) => compareVersions(b, a))
+  }
+
+  /** The releases supported on some platform, newest first. */
+  supportedBuilds(): string[] {
+    return this.builds('release').filter((build) => {
+      const json = this.read('release', build)
+      return PLATFORMS.some((p) => json?.binary[p]?.supported)
+    })
+  }
+
+  /** `platforms` of the release marked supported. Returns whether it changed. */
+  setSupported(build: string, platforms: Platform[]): boolean {
+    const json = this.read('release', build)
+    if (!json) throw new Error(`release ${build} is not tracked: pnpm track ${build}`)
+    for (const platform of platforms) {
+      const binary = json.binary[platform]
+      if (binary) binary.supported = true
+    }
+    return this.write(json)
   }
 
   /** Returns whether it changed. */

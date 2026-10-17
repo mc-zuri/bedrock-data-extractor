@@ -16,9 +16,9 @@ Node 24, pnpm, and a bedrock-data checkout next to this one:
 git clone https://github.com/mc-zuri/bedrock-data ../bedrock-data
 pnpm install
 pnpm track             # the builds minecraft.net offers now, into versions/
-pnpm support <build>   # a tracked release into supported.json
+pnpm support <build>   # each platform of a tracked release tried, those that pass marked supported
 pnpm extract           # each supported release bedrock-data lacks, into ../bedrock-data
-pnpm status            # each build: tracked, supported, exported
+pnpm status            # each build: its platforms, supported or not, and exported
 ```
 
 ## Docs
