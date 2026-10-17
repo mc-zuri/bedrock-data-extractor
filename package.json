@@ -12,20 +12,25 @@
     "support": "node --env-file-if-exists=.env src/main.ts support",
     "extract": "node --env-file-if-exists=.env src/main.ts extract",
     "status": "node --env-file-if-exists=.env src/main.ts status",
+    "native": "node --env-file-if-exists=.env src/main.ts native",
+    "check": "node --env-file-if-exists=.env src/main.ts check",
     "typecheck": "tsc",
     "lint": "oxlint --type-aware --deny-warnings src test",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format": "prettier --write . && clang-format --style=file -i --glob=native/*/*.{cpp,h}",
+    "format:check": "prettier --check . && clang-format --style=file --dry-run --Werror --glob=native/*/*.{cpp,h}",
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check",
     "test": "node --env-file-if-exists=.env --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "ajv": "8.20.0",
+    "prismarine-nbt": "2.8.0",
     "yauzl": "3.4.0"
   },
   "devDependencies": {
+    "@stylistic/eslint-plugin": "5.10.0",
     "@types/node": "^24.13.5",
     "@types/yauzl": "3.4.0",
+    "clang-format": "1.8.0",
     "oxlint": "1.86.0",
     "oxlint-tsgolint": "7.0.2003",
     "prettier": "3.9.9",

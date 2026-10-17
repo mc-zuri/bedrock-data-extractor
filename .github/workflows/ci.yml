@@ -27,6 +27,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+      - uses: ./.github/actions/native
       - run: pnpm test
         env:
           BEDROCK_DATA_DIR: bedrock-data

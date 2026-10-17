@@ -54,7 +54,11 @@ void test('what the schemas refuse is not written', () => {
 
 void test('versions.json lists the releases there are, newest first', () => {
   const repo = new DataRepo(emptyDataRepo())
-  for (const build of ['1.21.42.01', '1.26.52.3', '1.21.100.6']) repo.writeBuild(release(build))
+
+  for (const build of ['1.21.42.01', '1.26.52.3', '1.21.100.6']) {
+    repo.writeBuild(release(build))
+  }
+
   assert.equal(repo.writeVersions(), true)
   assert.deepEqual(JSON.parse(readFileSync(join(repo.root, 'versions.json'), 'utf8')), {
     formatVersion: 1,

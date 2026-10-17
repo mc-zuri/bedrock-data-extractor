@@ -1,12 +1,13 @@
 # Each supported release into bedrock-data, on a push to main that changes what is supported (a merged support pull
-# request) or how it is exported. A release bedrock-data has the data of is left as it is; run by hand with builds and
+# request) or how it is exported. Releases are read from their Linux zip (a release supported only on Windows is
+# exported locally). A release bedrock-data has the data of is left as it is; run by hand with builds and
 # force to export those again. The commit goes straight to bedrock-data's main.
 name: extract
 
 on:
   push:
     branches: [main]
-    paths: ['versions/release/**', 'src/**', 'package.json', 'pnpm-lock.yaml']
+    paths: ['versions/release/**', 'src/**', 'native/**', 'package.json', 'pnpm-lock.yaml']
   workflow_dispatch:
     inputs:
       builds:
@@ -45,6 +46,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/native
       - name: Export
         env:
           BEDROCK_DATA_DIR: bedrock-data

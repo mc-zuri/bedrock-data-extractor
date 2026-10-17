@@ -1,0 +1,26 @@
+# The native agent built for Linux (pnpm native: xmake, clang), and the OpenSSL 1.1 the servers before 1.19.40 load
+# (Ubuntu 24.04 has none: focal's, unpacked, on LD_LIBRARY_PATH). After pnpm install.
+name: native agent
+description: Builds the Linux agent and provides OpenSSL 1.1 for the older servers
+runs:
+  using: composite
+  steps:
+    - uses: xmake-io/github-action-setup-xmake@v1
+      with:
+        xmake-version: latest
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.xmake/packages
+          native/build
+        key: native-${{ runner.os }}-${{ hashFiles('native/**') }}
+        restore-keys: native-${{ runner.os }}-
+    - run: pnpm native
+      shell: bash
+    - name: OpenSSL 1.1
+      shell: bash
+      run: |
+        deb=libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+        curl -fsSL -o "$RUNNER_TEMP/$deb" "http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/$deb"
+        dpkg-deb -x "$RUNNER_TEMP/$deb" "$RUNNER_TEMP/libssl1.1"
+        echo "LD_LIBRARY_PATH=$RUNNER_TEMP/libssl1.1/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"

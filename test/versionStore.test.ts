@@ -23,13 +23,15 @@ void test('a release is supported once a platform of it is', () => {
   store.write(version('1.26.52.3', 'release'))
   store.write(version('1.26.51.1', 'release'))
   assert.deepEqual(store.supportedBuilds(), [])
-  assert.equal(store.setSupported('1.26.51.1', ['windows']), true)
-  assert.equal(store.setSupported('1.26.51.1', ['windows']), false)
+  assert.equal(store.setSupported('1.26.51.1', { windows: true }), true)
+  assert.equal(store.setSupported('1.26.51.1', { windows: true }), false)
   assert.deepEqual(store.supportedBuilds(), ['1.26.51.1'])
   assert.deepEqual(store.read('release', '1.26.51.1')?.binary, {
     linux: { url: zipUrl('1.26.51.1', 'release', 'linux'), sha256: 'b'.repeat(64), size: 9, supported: false },
     windows: { url: zipUrl('1.26.51.1', 'release', 'windows'), sha256: 'b'.repeat(64), size: 9, supported: true },
   })
+  assert.equal(store.setSupported('1.26.51.1', { windows: false }), true)
+  assert.deepEqual(store.supportedBuilds(), [])
 })
 
 void test("a build's file is written only where it changed, and as the schema says", () => {
@@ -43,7 +45,11 @@ void test("a build's file is written only where it changed, and as the schema sa
 void test('versions.json lists each channel newest first', () => {
   const root = join(tempDir(), 'versions')
   const store = new VersionStore(root, SCHEMAS_DIR)
-  for (const build of ['1.21.42.01', '1.26.52.3', '1.21.100.6']) store.write(version(build, 'release'))
+
+  for (const build of ['1.21.42.01', '1.26.52.3', '1.21.100.6']) {
+    store.write(version(build, 'release'))
+  }
+
   store.write(version('1.26.70.20', 'preview'))
   assert.equal(store.writeIndex(), true)
   assert.deepEqual(JSON.parse(readFileSync(join(root, 'versions.json'), 'utf8')), {

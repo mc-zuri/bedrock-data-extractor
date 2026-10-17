@@ -1,8 +1,8 @@
-# A tracked release made supported, platform by platform: each platform's zip exported and checked (pnpm support),
-# then exported (into a copy of bedrock-data, kept nowhere but as this run's artifact) and tested. The platforms that
-# pass are marked "supported" in versions/release/<build>.json by a pull request; merging it runs the extract workflow,
-# which exports the release into bedrock-data. A platform that fails gets an issue asking for its support, with the log.
-# Run by the track workflow for each new release, or by hand.
+# A tracked release made supported on Linux: its zip exported and checked with its server and the agent (pnpm
+# support), then exported (into a copy of bedrock-data, kept nowhere but as this run's artifact) and tested. Where it
+# passes, a pull request marks it "supported" in versions/release/<build>.json; merging it runs the extract workflow,
+# which exports the release into bedrock-data. Where it fails, an issue asks for its support, with the log. Windows is
+# supported locally (pnpm support <build> on Windows). Run by the track workflow for each new release, or by hand.
 name: support
 
 on:
@@ -48,12 +48,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Try each platform
+      - uses: ./.github/actions/native
+      - name: Try Linux
         id: support
         shell: bash
         run: |
           set -o pipefail
-          pnpm support "$BUILD" 2>&1 | tee support.log || echo 'failed=true' >> "$GITHUB_OUTPUT"
+          pnpm support "$BUILD" --platform=linux 2>&1 | tee support.log || echo 'failed=true' >> "$GITHUB_OUTPUT"
           if ! git diff --quiet -- "versions/release/$BUILD.json"; then echo 'marked=true' >> "$GITHUB_OUTPUT"; fi
       - name: Export and test
         id: test
@@ -70,6 +71,7 @@ jobs:
           path: |
             support.log
             bedrock-data/release/${{ inputs.build }}/
+            cache/release/${{ inputs.build }}/*/out/agent.log
           if-no-files-found: ignore
       - name: Open the pull request
         if: steps.support.outputs.marked == 'true' && steps.test.outcome == 'success'

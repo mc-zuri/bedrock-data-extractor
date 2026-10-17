@@ -1,5 +1,6 @@
 {
   "plugins": ["typescript", "node"],
+  "jsPlugins": ["@stylistic/eslint-plugin"],
   "categories": {
     "correctness": "error"
   },
@@ -15,6 +16,20 @@
     "typescript/no-misused-promises": "error",
     "typescript/await-thenable": "error",
     "typescript/only-throw-error": "error",
-    "func-style": ["error", "declaration"]
+    "func-style": ["error", "declaration"],
+    "curly": ["error", "all"],
+    "@stylistic/padding-line-between-statements": [
+      "error",
+      {
+        "blankLine": "always",
+        "prev": "*",
+        "next": ["if", "for", "while", "do", "switch", "try"]
+      },
+      {
+        "blankLine": "always",
+        "prev": ["if", "for", "while", "do", "switch", "try"],
+        "next": "*"
+      }
+    ]
   }
 }

@@ -5,8 +5,8 @@ track (every 6 hours, or by hand with builds)
   versions/ ─> commit to main
   └─ each release it added ─> support
 support (from track, or by hand with a build)
-  each platform: export and check; then export and test
-    passed ─> pull request "Support BDS <build>": those platforms "supported"
+  linux: export and check; then export and test
+    passed ─> pull request "Support BDS <build>": linux "supported"
     failed ─> issue "Support BDS <build>", with the log
 extract (push to main: a merged support pull request, or a change to the export)
   each supported release bedrock-data lacks ─> commit to bedrock-data main
@@ -14,22 +14,26 @@ extract (push to main: a merged support pull request, or a change to the export)
 
 - [track](../.github/workflows/track.yml) runs `pnpm track` and commits `versions/` to main. It then runs the support
   workflow for each release it added. Run by hand with `builds` (and `channel`, `force`) to track those.
-- [support](../.github/workflows/support.yml) runs `pnpm support` (each platform's zip), then `pnpm extract --force`
-  and `pnpm test` where a platform passed. The export goes into a copy of bedrock-data that is kept only as the run's
-  artifact.
-  - The platforms that pass: the pull request `support/<build>` marks them `"supported"` in
-    `versions/release/<build>.json` (or refreshes the open one).
-  - A platform that fails, or tests that fail: the issue "Support BDS \<build>" with the end of the log (or a comment
-    on the open one). Both can come of one run. A platform the export cannot handle yet is supported by fixing the
-    export and running support again, or marking it in the fix's pull request.
-- [extract](../.github/workflows/extract.yml) runs `pnpm extract` on a push to main that changes
-  `versions/release/`, `src/` or the dependencies, and commits the result straight to bedrock-data's main. A release
-  bedrock-data has the data of is left as it is: to export releases again after a fix, run it by hand with `builds`
-  and `force`.
-- [CI](../.github/workflows/ci.yml) runs `pnpm verify` and `pnpm test`, against bedrock-data's schemas.
+- [support](../.github/workflows/support.yml) builds the agent, runs `pnpm support --platform=linux` (the Linux zip,
+  its server run with the agent), then `pnpm extract --force` and `pnpm test` where it passed. The export goes into a
+  copy of bedrock-data that is kept only as the run's artifact, with the agent's log.
+  - Where it passes: the pull request `support/<build>` marks linux `"supported"` in `versions/release/<build>.json`
+    (or refreshes the open one).
+  - Where it fails, or the tests fail: the issue "Support BDS \<build>" with the end of the log (or a comment on the
+    open one). A build the agent cannot bind yet is supported by adding its bindings
+    ([Development](development.md#a-new-build)) and running support again.
+  - CI runs Linux only: a release's Windows zip is supported locally, `pnpm support <build>` on Windows, committed by
+    hand.
+- [extract](../.github/workflows/extract.yml) builds the agent and runs `pnpm extract` on a push to main that changes
+  `versions/release/`, `src/`, `native/` or the dependencies, and commits the result straight to bedrock-data's main. A
+  release bedrock-data has the data of is left as it is: to export releases again after a fix, run it by hand with
+  `builds` and `force`. A release supported only on Windows (1.21.50.07) is exported locally on Windows, its commit
+  naming the extractor commit as extract's do.
+- [CI](../.github/workflows/ci.yml) runs `pnpm verify` and `pnpm test`, against bedrock-data's schemas, and builds the
+  Linux agent.
 
-bedrock-data-generator picks bedrock-data's new commits up on its own schedule, half an hour after track's (or at
-once, through bedrock-data's notify-generator workflow, where that has a token).
+The [native](../.github/actions/native/action.yml) action builds the agent (xmake, clang, its packages and build
+cached) and puts focal's OpenSSL 1.1 on `LD_LIBRARY_PATH` for the servers before 1.19.40.
 
 ## What they need
 

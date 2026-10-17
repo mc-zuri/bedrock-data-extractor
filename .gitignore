@@ -4,3 +4,8 @@ node_modules/
 /cache/
 # where the workflows check out bedrock-data
 /bedrock-data/
+# xmake's build and cache of the native agent
+/native/build/
+/native/.xmake/
+
+/.xmake/
