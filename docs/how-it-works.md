@@ -1,12 +1,12 @@
 # How it works
 
-| file                              | holds                                                                    | written by                   |
-| --------------------------------- | ------------------------------------------------------------------------ | ---------------------------- |
-| `versions/<channel>/<build>.json` | a build (release or preview) and each platform's zip: URL, sha256, size  | `pnpm track`                 |
-|                                   | each zip's `supported`: whether the release is exported from it          | `pnpm support` (`true` only) |
-| `versions/versions.json`          | each channel's builds, newest first                                      | `pnpm track`                 |
-| bedrock-data `release/<build>/…`  | what was exported from a release (bedrock-data's README says the format) | `pnpm extract`               |
-| bedrock-data `versions.json`      | the releases bedrock-data has                                            | `pnpm extract`               |
+| file                              | holds                                                                    | written by                                      |
+| --------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| `versions/<channel>/<build>.json` | a build (release or preview) and each platform's zip: URL, sha256, size  | `pnpm track`                                    |
+|                                   | each zip's `supported`: whether the release is exported from it          | `pnpm track` (`false`), `pnpm support` (`true`) |
+| `versions/versions.json`          | each channel's builds, newest first                                      | `pnpm track`                                    |
+| bedrock-data `release/<build>/…`  | what was exported from a release (bedrock-data's README says the format) | `pnpm extract`                                  |
+| bedrock-data `versions.json`      | the releases bedrock-data has                                            | `pnpm extract`                                  |
 
 A build is named as its zip names it: `1.21.42.01` (`bedrock-server-1.21.42.01.zip`), never `1.21.42.1`.
 

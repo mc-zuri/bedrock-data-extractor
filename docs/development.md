@@ -2,7 +2,8 @@
 
 `pnpm verify` (tsc, oxlint, prettier) and `pnpm test` (node:test). Node 24 runs the `.ts` files as they are (type
 stripping): there is no build step. The tests download nothing: a test that needs a zip writes a small one
-(`test/helpers.ts` `writeZip`), and the bedrock-data tests use the schemas of `BEDROCK_DATA_DIR`.
+(`test/helpers.ts`: `writeZip`, and `cachedRelease` for a tracked release whose zips are already in the cache), and
+the bedrock-data tests use the schemas of `BEDROCK_DATA_DIR`.
 
 ## Code
 
@@ -24,9 +25,9 @@ stripping): there is no build step. The tests download nothing: a test that need
 
 ## Fixing an export
 
-A wrong value is fixed here, never by editing bedrock-data or `versions/` by hand, and never by a
-layer of hardcoded corrections. Merge the fix, then export the releases it changes again: the extract workflow by hand
-with `builds` and `force` (locally, `pnpm extract <builds> --force`).
+A wrong value is fixed here, never by editing bedrock-data or `versions/` by hand, and never by a layer of hardcoded
+corrections. Merge the fix, then export the releases it changes again: the extract workflow by hand with `builds` and
+`force` (locally, `pnpm extract <builds> --force`).
 
 A change to a bedrock-data file's format changes bedrock-data's README and schemas in the same change, and bumps its
 `formatVersion` where a reader must know.
@@ -40,5 +41,5 @@ xmake + Zydis, injected on Windows, preloaded on Linux) moves here one kind of d
 - its export and checks, here;
 - its generator, in bedrock-data-generator.
 
-The small kinds come first (biomes, effects, enchantments), then blocks and items. A new build the agent cannot bind
-yet fails support, and its issue is where its bindings are added.
+The small kinds come first (biomes, effects, enchantments), then blocks and items. Its bindings differ by platform:
+a new build the agent cannot bind yet fails support on that platform, and its issue is where its bindings are added.
