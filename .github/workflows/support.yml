@@ -31,7 +31,10 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
+      # main as it is when the run starts: the build track just committed, and the releases supported since
       - uses: actions/checkout@v5
+        with:
+          ref: main
       - name: Check out bedrock-data
         uses: actions/checkout@v5
         with:
