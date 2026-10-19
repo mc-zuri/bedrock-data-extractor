@@ -47,6 +47,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/native
+      # what extract writes, checked against this bedrock-data's schemas before any server runs
+      - name: Test
+        env:
+          BEDROCK_DATA_DIR: bedrock-data
+        run: pnpm test
       - name: Export
         env:
           BEDROCK_DATA_DIR: bedrock-data

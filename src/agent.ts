@@ -41,14 +41,23 @@ export interface AgentRun {
   help: Record<string, string[]>
 }
 
-export async function runAgent(serverDir: string, build: string, host: Host, out: string): Promise<AgentRun> {
+/** One run of the agent in the server at `serverDir`; `signal` ends the server, failing the run. */
+export async function runAgent(serverDir: string, build: string, host: Host, out: string, signal?: AbortSignal): Promise<AgentRun> {
+  signal?.throwIfAborted()
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
 
   const result = join(out, 'result.txt')
   const server = await start(serverDir, host, { ...host.agentEnv, BDG_VERSION: build, BDG_OUT: out }, transportOf(build))
 
+  function stop(): void {
+    void server.kill()
+  }
+
+  signal?.addEventListener('abort', stop, { once: true })
+
   try {
+    signal?.throwIfAborted()
     const inDimension = (await server.command(TICKING_AREA, [...ADDED, 'dimension not found'])) !== 'dimension not found'
     const sent = await joinServer(build, server, async () => {
       if (!inDimension) {
@@ -71,6 +80,7 @@ export async function runAgent(serverDir: string, build: string, host: Host, out
 
     return { result: text.replace(/^ok /, ''), sent, help }
   } finally {
+    signal?.removeEventListener('abort', stop)
     await server.kill()
   }
 }

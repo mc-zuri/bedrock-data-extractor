@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { readBlocks } from './blocks.ts'
 import { BEDROCK_DATA_DIR, CACHE_DIR, JOBS, SCHEMAS_DIR, VERSIONS_DIR } from './config.ts'
 import { DataRepo } from './dataRepo.ts'
 import { checkSteve } from './checks.ts'
@@ -23,7 +24,7 @@ interface Options {
 
 interface Step {
   about: string
-  /** returns what failed, where some may fail and the others go on */
+  /** returns what failed: the first failure stops the rest (util.ts forEach) */
   run(options: Options): Promise<string[] | void> | string[] | void
 }
 
@@ -176,7 +177,7 @@ async function extractBuilds({ builds, force }: Options): Promise<string[]> {
     todo,
     JOBS,
     (build) => `release/${build}`,
-    (build) => extract(repo, store, build, force, CACHE_DIR),
+    (build, signal) => extract(repo, store, build, force, CACHE_DIR, readBlocks, signal),
   )
 
   if (repo.writeVersions()) {

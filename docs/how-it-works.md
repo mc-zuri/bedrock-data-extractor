@@ -62,7 +62,8 @@ pnpm status
 
   A release bedrock-data has every kind of is skipped unless `--force`d. A release exported from another platform than
   this machine's is left for one that runs it (named, it fails). A zip and its server are deleted once the release is
-  done; one that failed keeps them, and the agent's log. `JOBS` builds at a time, each server on ports of its own.
+  done; one that failed keeps them, and the agent's log. `JOBS` builds at a time, each server on ports of its own; the
+  first failure stops the run (the servers running are ended, none is started after it).
 
 - **steve** (by hand) keeps each named release's default skin (Steve), which no server holds: it listens on `--port`
   (19150) as a server of the release's version (bedrock-protocol's, no BDS: the skin is in the first packet a client

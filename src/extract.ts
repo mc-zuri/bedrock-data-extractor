@@ -8,7 +8,7 @@ import { LANGUAGE_FILE, readLanguage, type Language } from './language.ts'
 import type { VersionJson, VersionStore } from './versionStore.ts'
 import { PLATFORMS, type Platform } from './versions.ts'
 
-export type ReadBlocks = (zip: string, build: string, platform: Platform, work: string) => Promise<Blocks>
+export type ReadBlocks = (zip: string, build: string, platform: Platform, work: string, signal?: AbortSignal) => Promise<Blocks>
 
 export interface Release {
   language: Language
@@ -63,15 +63,23 @@ export function workDir(cache: string, build: string, platform: Platform): strin
   return join(cacheDir(cache, build), platform)
 }
 
-export async function readRelease(version: VersionJson, platform: Platform, cache: string, blocks: ReadBlocks = readBlocks): Promise<Release> {
+export async function readRelease(version: VersionJson, platform: Platform, cache: string, blocks: ReadBlocks = readBlocks, signal?: AbortSignal): Promise<Release> {
   const zip = await trackedZip(version, platform, cache)
   const language = await readLanguage(zip)
   checkLanguage(language)
-  const read = await blocks(zip, version.build, platform, workDir(cache, version.build, platform))
+  const read = await blocks(zip, version.build, platform, workDir(cache, version.build, platform), signal)
   return { language, blocks: asOnWindows(read, version.build, platform) }
 }
 
-export async function extract(repo: DataRepo, store: VersionStore, build: string, force: boolean, cache: string, blocks: ReadBlocks = readBlocks): Promise<string | undefined> {
+export async function extract(
+  repo: DataRepo,
+  store: VersionStore,
+  build: string,
+  force: boolean,
+  cache: string,
+  blocks: ReadBlocks = readBlocks,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
   if (!force && isExtracted(repo, build)) {
     return undefined
   }
@@ -88,7 +96,7 @@ export async function extract(repo: DataRepo, store: VersionStore, build: string
     throw new Error(`release ${build} is supported on no platform: pnpm support ${build}`)
   }
 
-  const release = await readRelease(version, from, cache, blocks)
+  const release = await readRelease(version, from, cache, blocks, signal)
   const changed: string[] = []
   const binary: BuildJson['binary'] = {}
 

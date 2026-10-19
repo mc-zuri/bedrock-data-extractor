@@ -642,11 +642,12 @@ export function readAgentOutput(out: string, serverDir: string, sent: Sent, help
   return { palette, states, shapes, blocks, items, enchantments, biomes, effects, enums, tints, recipes, entities, commands, attributes }
 }
 
-export async function readBlocks(zip: string, build: string, platform: Platform, work: string): Promise<Blocks> {
+export async function readBlocks(zip: string, build: string, platform: Platform, work: string, signal?: AbortSignal): Promise<Blocks> {
   const host = agentHost(platform)
   const server = join(work, 'server')
   const out = join(work, 'out')
+  signal?.throwIfAborted()
   await unpackServer(zip, server, host)
-  const { sent, help } = await runAgent(server, build, host, out)
+  const { sent, help } = await runAgent(server, build, host, out, signal)
   return readAgentOutput(out, server, sent, help)
 }
