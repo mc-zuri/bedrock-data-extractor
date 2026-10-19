@@ -1,9 +1,20 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { factsAsOnWindows, parseBlockTypes, parseItems, parsePalette, parseShapes, shapesAsOnWindows, type BlockShapes, type BlockTypes, type Items } from '../src/blocks.ts'
+import {
+  factsAsOnWindows,
+  itemsAsOnWindows,
+  parseBlockTypes,
+  parseItems,
+  parsePalette,
+  parseShapes,
+  shapesAsOnWindows,
+  type BlockShapes,
+  type BlockTypes,
+  type Items,
+} from '../src/blocks.ts'
 import { f32 } from '../src/util.ts'
 import { checkBlocks, checkItems, checkPalette, checkShapes } from '../src/checks.ts'
-import { blocksNbt, itemsNbt, paletteNbt, sampleBlocks, shapesNbt } from './helpers.ts'
+import { blocksNbt, itemsNbt, paletteNbt, sampleBlocks, sampleItems, shapesNbt } from './helpers.ts'
 
 function last<T>(list: T[]): T {
   const entry = list.at(-1)
@@ -132,4 +143,30 @@ void test("a Linux server's explosion resistances from 1.21.42 to 1.26.10 are th
   assert.equal(factsAsOnWindows(linux, '1.21.30.03', 'linux'), linux, "before, the agent divides the type's by 5 on each platform")
   assert.equal(factsAsOnWindows(linux, '1.26.20.5', 'linux'), linux, 'from 1.26.20 both are built with clang')
   assert.equal(factsAsOnWindows(linux, '1.21.42.01', 'windows'), linux)
+})
+
+void test("a Linux server's ids of the items a pack defines are the Windows server's: each pack's ids in its files' NTFS order", () => {
+  function numbered(ids: Record<string, number>): Items {
+    const items = sampleItems()
+    const first = items.items[0]
+    return { ...items, items: Object.entries(ids).map(([name, id]) => ({ ...first, name: `minecraft:${name}`, id })) }
+  }
+
+  const packItems = [
+    { name: 'minecraft:wind_charge', pack: 'vanilla_1.21.0', file: 'wind_charge.json' },
+    { name: 'minecraft:trial_key', pack: 'vanilla_1.21.0', file: 'trial_key.json' },
+    { name: 'minecraft:ominous_trial_key', pack: 'vanilla_1.21.0', file: 'ominous_trial_key.json' },
+    { name: 'minecraft:breeze_rod', pack: 'vanilla_1.21.10', file: 'breeze_rod.json' },
+    // '_' after the letters: light_blue before lime, as NTFS lists them
+    { name: 'minecraft:lime_bundle', pack: 'vanilla_1.21.40', file: 'lime_bundle.json' },
+    { name: 'minecraft:light_blue_bundle', pack: 'vanilla_1.21.40', file: 'light_blue_bundle.json' },
+    { name: 'minecraft:light_bundle', pack: 'vanilla_1.21.40', file: 'Light_Bundle.json' },
+  ]
+  const linux = numbered({ apple: 257, wind_charge: 258, trial_key: 259, ominous_trial_key: 260, breeze_rod: 261, lime_bundle: 262, light_blue_bundle: 263, light_bundle: 264 })
+  assert.deepEqual(
+    itemsAsOnWindows(linux, packItems, '1.21.20.03', 'linux'),
+    numbered({ apple: 257, ominous_trial_key: 258, trial_key: 259, wind_charge: 260, breeze_rod: 261, light_blue_bundle: 262, light_bundle: 263, lime_bundle: 264 }),
+  )
+  assert.equal(itemsAsOnWindows(linux, packItems, '1.26.40.8', 'linux'), linux, 'from 1.26.40 the Linux server numbers them in name order too')
+  assert.equal(itemsAsOnWindows(linux, packItems, '1.21.20.03', 'windows'), linux)
 })

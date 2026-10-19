@@ -53,7 +53,7 @@ elseif is_plat("linux") then
         set_kind("shared")
         add_deps("bdg_bindings")
         add_packages("zydis")
-        add_files("game/*.cpp", "export/*.cpp", "agent/Agent.cpp", "agent/EntryLinux.cpp", "memory/Hook.cpp", "memory/Flow.cpp", "memory/Code.cpp")
+        add_files("game/*.cpp", "export/*.cpp", "agent/Agent.cpp", "agent/EntryLinux.cpp", "agent/ListingLinux.cpp", "memory/Hook.cpp", "memory/Flow.cpp", "memory/Code.cpp")
         -- a shared library's link flags are shflags; their symbols stay its own, so the server's older system
         -- libstdc++ (Debian 12's) is never asked for
         add_shflags("-static-libstdc++", "-static-libgcc", "-Wl,--exclude-libs,ALL")

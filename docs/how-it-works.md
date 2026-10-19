@@ -56,7 +56,9 @@ pnpm status
      definitions of blocks and entities and the loot tables they name;
   5. checks the data (`src/checks.ts`); before 1.26.20, what a Linux server gives otherwise than the Windows server
      only because their compilers round a float otherwise is made the Windows server's (`asOnWindows`: the chests' top
-     `0.95`, not `0.95000005`; from 1.21.42, 21 blocks' explosion resistance, `4.2000003`, not `4.2`);
+     `0.95`, not `0.95000005`; from 1.21.42, 21 blocks' explosion resistance, `4.2000003`, not `4.2`), and before
+     1.26.40 the ids of the items a `vanilla_<version>` pack defines (the spears, bundles, trial keys): each pack's ids
+     go to its items in the order NTFS lists their files (`src/packItems.ts`);
   6. writes it into bedrock-data, with `build.json`: the release, each zip's URL, sha256 and size, and which platform
      each kind was read from.
 
@@ -81,7 +83,10 @@ pnpm status
 The blocks are what the running server says, so they are read inside it: `native/` is an agent the server loads.
 
 - **Windows**: `bdg_inject.exe` loads `bdg_agent.dll` into `bedrock_server.exe` once it prints "Server started".
-- **Linux**: `libbdg_agent.so` is preloaded (`LD_PRELOAD`), and starts once node writes `<out>/go`.
+- **Linux**: `libbdg_agent.so` is preloaded (`LD_PRELOAD`), and starts once node writes `<out>/go`. Its `opendir`
+  and `readdir` list every folder in NTFS's order (by name, case folded), as the Windows server's are listed: an ext4
+  folder lists in an order of its filesystem's own, and the server numbers what it reads in that order (1.21.0's trial
+  keys), so two machines would number them otherwise.
 
 Before it is loaded, node adds a ticking area (`tickingarea add`), so a chunk far from the world origin stays loaded
 with no player there: the agent sets blocks in it. Before 1.17.0 the console runs no command in a dimension, and the

@@ -9,9 +9,10 @@ writes.
   a pull request. bedrock-data: `pnpm extract`, but each release's `steve.json.gz`: `pnpm steve`, run by a person (a
   real client joins it). Never hand-edit any of them, never add an override layer of
   corrections: where extracted data disagrees with another source, find out why and fix the extraction, or document
-  the disagreement. The one exception: before 1.26.20, what a Linux server gives otherwise than the Windows server
-  only because their compilers round a float otherwise is written as Windows gives it (`asOnWindows`: the chests' top,
-  21 blocks' explosion resistance), so minecraft-data's files do not depend on the platform a release was read from.
+  the disagreement. The one exception: what a Linux server gives otherwise than the Windows server only because their
+  compilers round a float otherwise (before 1.26.20) or it lists a pack's files in another order (before 1.26.40) is
+  written as Windows gives it (`asOnWindows`: the chests' top, 21 blocks' explosion resistance, the ids of the items a
+  pack defines), so minecraft-data's files do not depend on the platform a release was read from.
 - **A run changes files only where the game says otherwise.** No timestamps, no extractor version, no
   machine-dependent bytes (gzip is rewritten only where its decompressed text changed). `pnpm track` with nothing new,
   or `pnpm extract` with nothing unexported, must leave both repos' `git status` clean.

@@ -163,7 +163,7 @@ function stateFacts(name: string, facts: Partial<StateFacts>): StateFacts {
   }
 }
 
-function sampleItems(): Items {
+export function sampleItems(): Items {
   const known = [
     { name: 'minecraft:stone', maxStackSize: 64 },
     { name: 'minecraft:dirt', maxStackSize: 64 },
@@ -259,6 +259,7 @@ export function sampleBlocks(): Blocks {
       })),
     },
     ...sampleSent(),
+    packItems: [],
   }
 }
 

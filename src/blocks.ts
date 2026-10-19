@@ -20,6 +20,7 @@ import {
 } from './checks.ts'
 import { readEntities } from './entities.ts'
 import { readBlockLoot } from './loot.ts'
+import { readPackItems, type PackItem } from './packItems.ts'
 import { agentHost } from './platform.ts'
 import { parseBiomes, parseEffects, parseEnums, parseTints, type Effect, type Enums, type Tints } from './registries.ts'
 import { biomesOf, blockStateOf, commandsOf, entitiesOf, recipesOf, type Attributes, type Biomes, type CommandsFile, type Entities, type Recipes } from './sent.ts'
@@ -193,6 +194,8 @@ export interface Blocks {
   entities: Entities
   commands: CommandsFile
   attributes: Attributes
+  /** the items the packs define, by the pack the server numbers them in (not written) */
+  packItems: PackItem[]
 }
 
 interface Tag<T = unknown> {
@@ -286,9 +289,55 @@ export function factsAsOnWindows(blocks: BlockTypes, build: string, platform: Pl
   }
 }
 
-/** What a Linux server gives, as the release's Windows server gives it, where only their compilers make them differ */
+// from it the Linux server, too, numbers a pack's items in their files' name order
+const PACK_ITEMS_BY_NAME_FROM = '1.26.40'
+
+/** As NTFS orders a folder: ASCII letters compared upper-cased ('_' after them) */
+function ntfsOrder(a: string, b: string): number {
+  function upper(s: string): string {
+    return s.replace(/[a-z]/g, (c) => c.toUpperCase())
+  }
+
+  return upper(a) < upper(b) ? -1 : upper(a) > upper(b) ? 1 : 0
+}
+
+/**
+ * The items a Linux server gives, as the release's Windows server gives them. Both servers number the items a pack
+ * defines (packItems) on the same ids, the Windows server in the order its NTFS folder lists their files, the Linux
+ * server before 1.26.40 in an order of its own (from 1.21.42 the same on every machine, before it its ext4 folder's).
+ */
+export function itemsAsOnWindows(items: Items, packItems: PackItem[], build: string, platform: Platform): Items {
+  if (platform !== 'linux' || compareVersions(build, PACK_ITEMS_BY_NAME_FROM) >= 0) {
+    return items
+  }
+
+  const idOf = new Map(items.items.map((i) => [i.name, i.id]))
+  const byPack = new Map<string, PackItem[]>()
+
+  for (const item of packItems) {
+    if (idOf.has(item.name)) {
+      byPack.set(item.pack, [...(byPack.get(item.pack) ?? []), item])
+    }
+  }
+
+  const ids = new Map<string, number>()
+
+  for (const inPack of byPack.values()) {
+    const taken = inPack.map((i) => idOf.get(i.name) ?? 0).sort((a, b) => a - b)
+    inPack.sort((a, b) => ntfsOrder(a.file, b.file)).forEach((i, k) => ids.set(i.name, taken[k]))
+  }
+
+  return { ...items, items: items.items.map((i) => ({ ...i, id: ids.get(i.name) ?? i.id })).sort((a, b) => a.id - b.id) }
+}
+
+/** What a Linux server gives, as the release's Windows server gives it, where only their compilers and filesystems make them differ */
 export function asOnWindows(read: Blocks, build: string, platform: Platform): Blocks {
-  return { ...read, shapes: shapesAsOnWindows(read.shapes, build, platform), blocks: factsAsOnWindows(read.blocks, build, platform) }
+  return {
+    ...read,
+    shapes: shapesAsOnWindows(read.shapes, build, platform),
+    blocks: factsAsOnWindows(read.blocks, build, platform),
+    items: itemsAsOnWindows(read.items, read.packItems, build, platform),
+  }
 }
 
 export function parseShapes(raw: Buffer): BlockShapes {
@@ -626,6 +675,7 @@ export function readAgentOutput(out: string, serverDir: string, sent: Sent, help
   const entities = entitiesOf(sent, readEntities(serverDir))
   const commands = commandsOf(sent, help)
   const attributes = { attributes: sent.attributes }
+  const packItems = readPackItems(serverDir)
   checkPalette(states)
   checkShapes(shapes, states)
   checkItems(items)
@@ -639,7 +689,7 @@ export function readAgentOutput(out: string, serverDir: string, sent: Sent, help
   checkEntities(entities)
   checkCommands(commands)
   checkAttributes(attributes)
-  return { palette, states, shapes, blocks, items, enchantments, biomes, effects, enums, tints, recipes, entities, commands, attributes }
+  return { palette, states, shapes, blocks, items, enchantments, biomes, effects, enums, tints, recipes, entities, commands, attributes, packItems }
 }
 
 export async function readBlocks(zip: string, build: string, platform: Platform, work: string, signal?: AbortSignal): Promise<Blocks> {
