@@ -20,7 +20,7 @@ struct Module {
     [[nodiscard]] std::uint32_t rva(std::uintptr_t address) const { return textRva + static_cast<std::uint32_t>(address - textBegin); }
 };
 
-// IDA syntax: "48 8B 05 ? ? ? ? 48 33 C4"
+// bytes in hex, ? for any: "48 8B 05 ? ? ? ? 48 33 C4"
 class Pattern {
 public:
     static std::optional<Pattern> parse(std::string_view text);

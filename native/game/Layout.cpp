@@ -17,8 +17,10 @@
 
 // Each member is the one offset where every block the game is known for reads as it is known to: a BlockLegacy's
 // permutations a vector of Blocks (their RTTI says so) with its default state right after it, a Block's serialization
-// id its CompoundTag (by the vtable). Where more than one offset fits, none is taken. The game's operator delete is where
-// the deleting destructors of CompoundTag and Item go once they have destroyed (both, one target).
+// id its CompoundTag (by the vtable), the description ids, the scalars of the default states (stone's hardness 1.5,
+// obsidian's resistance 1200, glowstone's light 15, ...), the drop strategy an object whose class names it a drop
+// strategy. Where more than one offset fits, none is taken. The game's operator delete is where the deleting destructors
+// of CompoundTag and Item go once they have destroyed (both, one target).
 
 namespace bdg::game {
 
@@ -105,6 +107,34 @@ std::int64_t permutationsAt(Finder const& f, std::uintptr_t blockVtable, std::st
     return found;
 }
 
+std::int64_t floatAt(Finder const& f, std::initializer_list<std::pair<char const*, float>> known, std::string& why, char const* what) {
+    return onlyOffset(
+        8, 0x200, 4,
+        [&](std::int64_t off) {
+            for (auto const& [name, value] : known) {
+                if (!f.state(name) || memory::read<float>(f.state(name), off) != value) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        why, what);
+}
+
+std::int64_t byteAt(Finder const& f, std::initializer_list<std::pair<char const*, int>> known, std::string& why, char const* what) {
+    return onlyOffset(
+        8, 0x200, 1,
+        [&](std::int64_t off) {
+            for (auto const& [name, value] : known) {
+                if (!f.state(name) || memory::read<std::uint8_t>(f.state(name), off) != value) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        why, what);
+}
+
 // the targets of the `jmp rel32`s in the first bytes of a deleting destructor (slot 1): one is its tail call, after it
 // has destroyed the object, to operator delete
 std::vector<std::uintptr_t> jumpsOfDestructor(std::uintptr_t vtable) {
@@ -171,6 +201,27 @@ std::string findLayout(World const& world) {
                                                   readPtr(f.state("glass"), off) == tagVtable;
                                        },
                                        why, "Block::mSerializationId"));
+    found(n::BlockTypeDescriptionId,
+          onlyOffset(
+              8, 0x800, 8,
+              [&](std::int64_t off) { return memory::readString(f.type("obsidian") + off) == "tile.obsidian" && memory::readString(f.type("glass") + off) == "tile.glass"; }, why,
+              "BlockLegacy::mDescriptionId"));
+    found(n::BlockDestroySpeed, floatAt(f, {{"stone", 1.5f}, {"dirt", 0.5f}, {"obsidian", 35.0f}, {"bedrock", -1.0f}, {"glass", 0.3f}}, why, "Block::mDestroySpeed"));
+    found(n::BlockExplosionResistance,
+          floatAt(f, {{"stone", 6.0f}, {"dirt", 0.5f}, {"obsidian", 1200.0f}, {"bedrock", 3600000.0f}, {"glass", 0.3f}}, why, "Block::mExplosionResistance"));
+    found(n::BlockLightEmission, byteAt(f, {{"glowstone", 15}, {"torch", 14}, {"redstone_torch", 7}, {"stone", 0}, {"glass", 0}}, why, "Block::mLightEmission"));
+    found(n::BlockLightDampening, byteAt(f, {{"stone", 15}, {"glowstone", 15}, {"glass", 0}, {"air", 0}, {"oak_leaves", 1}, {"ice", 3}, {"torch", 0}}, why, "Block::mLightBlock"));
+    found(n::BlockTypeDropStrategy, onlyOffset(
+                                        8, 0x800, 8,
+                                        [&](std::int64_t off) {
+                                            for (char const* name : {"stone", "dirt", "obsidian"}) {
+                                                if (memory::classOf(readPtr(f.type(name), off)).find("DropStrategy") == std::string::npos) {
+                                                    return false;
+                                                }
+                                            }
+                                            return true;
+                                        },
+                                        why, "BlockLegacy::mResourceDropsStrategy"));
     if (!why.empty()) {
         return why;
     }

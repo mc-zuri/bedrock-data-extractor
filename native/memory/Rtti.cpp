@@ -15,10 +15,16 @@ std::string classOf(std::uintptr_t) { return ""; }
 #else
 namespace {
 
-// where in the image's writable data (where typeinfos and vtables are, relocated) a word is `value`
+// where in the image's data a word is `value`: its writable data, where a position independent build's typeinfos and
+// vtables are (relocated), then where it keeps constants, where an older build's are (not position independent: 1.19.30's
+// read-only data, 1.18.30's .rodata in its code segment)
 template <class Visit>
 void eachWordOf(std::uintptr_t value, Visit&& visit) {
-    for (auto const& [from, to] : dataSections()) {
+    auto sections = dataSections();
+    for (auto range : constantSections()) {
+        sections.push_back(range);
+    }
+    for (auto const& [from, to] : sections) {
         for (std::uintptr_t at = (from + 7) & ~std::uintptr_t{7}; at + 8 <= to; at += 8) {
             if (*reinterpret_cast<std::uintptr_t const*>(at) == value && !visit(at)) {
                 return;
@@ -30,7 +36,7 @@ void eachWordOf(std::uintptr_t value, Visit&& visit) {
 }
 
 std::uintptr_t vtableOf(std::string_view typeName) {
-    for (auto const& [from, to] : readOnlySections()) {
+    for (auto const& [from, to] : constantSections()) {
         auto const* end = reinterpret_cast<char const*>(to);
         for (char const* at = reinterpret_cast<char const*>(from); at + typeName.size() < end; ++at) {
             at = static_cast<char const*>(std::memchr(at, typeName[0], static_cast<std::size_t>(end - at)));

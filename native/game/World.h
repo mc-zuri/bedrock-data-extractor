@@ -1,6 +1,6 @@
 #pragma once
-// The game objects the export reads, whichever way a build keeps them (bindings/Steps.cpp). Everything in game/ is
-// SEH-safe: a wrong offset or slot gives nothing found, never a crash.
+// The game objects the export reads, whichever way a build keeps them (bindings/Steps.cpp). Reads in game/ are guarded:
+// a wrong offset gives nothing found, not a crash.
 
 #include <cstdint>
 #include <optional>

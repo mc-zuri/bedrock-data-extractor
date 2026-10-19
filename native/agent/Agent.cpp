@@ -5,21 +5,27 @@
 #include "core/Log.h"
 #include "export/Exporter.h"
 #include "game/Blocks.h"
+#include "game/Items.h"
 #include "game/Layout.h"
 #include "game/World.h"
 #include "memory/Stl.h"
 
 #include <atomic>
 #include <cstdlib>
+#include <memory>
 
 namespace bdg::agent {
 
 namespace {
 
-constexpr exporter::Exporter exporters[] = {&exporter::exportPalette, &exporter::exportShapes};
+// the blocks after the shapes: their drops set blocks in the world (far from where the shapes are asked)
+constexpr exporter::Exporter exporters[] = {&exporter::exportPalette, &exporter::exportShapes,  &exporter::exportBlocks, &exporter::exportItems, &exporter::exportEnchantments,
+                                            &exporter::exportBiomes,  &exporter::exportEffects, &exporter::exportEnums,  &exporter::exportTints};
 
 std::string       gOut;
 std::atomic<bool> gDone{false};
+
+constexpr int MaxAgain = 5;
 
 std::string env(char const* name) {
     char const* v = std::getenv(name);
@@ -56,25 +62,41 @@ void finish(std::string const& result) {
 bool done() { return gDone.load(); }
 
 // On the tick thread, right after the game's own tick: the game waits for it, so nothing changes under the walk or the
-// calls.
+// calls. It runs on the server's own thread: from 1.21 the game reaches the item registry through thread-local storage,
+// which another thread does not have. An exporter whose failure a later tick may not have is tried again on the next
+// attempts, from where it stopped.
 bool attempt(std::uintptr_t tickSelf) {
-    auto world = game::findWorld(tickSelf);
-    if (!world) {
-        return false;
+    static std::unique_ptr<exporter::Context> context;
+    static std::size_t                        next  = 0;
+    static int                                again = 0;
+    static std::string                        wrote;
+    if (!context) {
+        auto world = game::findWorld(tickSelf);
+        if (!world) {
+            return false;
+        }
+        if (std::string const why = game::findLayout(*world); !why.empty()) {
+            finish("FAILED: layout: " + why);
+            return true;
+        }
+        auto blockTypes = game::blockTypes(*world);
+        if (!blockTypes.error.empty()) {
+            finish("FAILED: " + blockTypes.error);
+            return true;
+        }
+        auto items = game::itemTypes(*world);
+        if (!items.error.empty()) {
+            finish("FAILED: items: " + items.error);
+            return true;
+        }
+        context = std::make_unique<exporter::Context>(exporter::Context{*world, std::move(blockTypes.types), std::move(items), gOut});
     }
-    if (std::string const why = game::findLayout(*world); !why.empty()) {
-        finish("FAILED: layout: " + why);
-        return true;
-    }
-    auto blockTypes = game::blockTypes(*world);
-    if (!blockTypes.error.empty()) {
-        finish("FAILED: " + blockTypes.error);
-        return true;
-    }
-    exporter::Context const context{*world, std::move(blockTypes.types), gOut};
-    std::string             wrote;
-    for (auto const exporter : exporters) {
-        auto result = exporter(context);
+    for (; next < std::size(exporters); ++next) {
+        auto result = exporters[next](*context);
+        if (!result.ok && result.again && ++again <= MaxAgain) {
+            log::info("{}: trying again on a later tick ({} of {})", result.message, again, MaxAgain);
+            return false;
+        }
         if (!result.ok) {
             finish("FAILED: " + result.message);
             return true;

@@ -89,4 +89,15 @@ inline TreeLayout treeLayout() {
 
 constexpr std::int64_t TreeValue = 32;
 
+// std::unordered_map: its elements in a linked list, the map holding where it starts:
+//   MSVC:      a pointer to the list's head node; nodes { next, prev, value @16 }, circular through the head
+//   libstdc++: the first node (before_begin.next); nodes { next, value @8 }, the last one's next null
+//   libc++:    the first node; nodes { next, hash, value @16 }, the last one's next null
+struct HashLayout {
+    std::int64_t value;
+    bool         throughHead;
+};
+
+inline HashLayout hashLayout() { return stlKind() == Stl::Libstdcxx ? HashLayout{8, false} : HashLayout{16, stlKind() == Stl::Msvc}; }
+
 }

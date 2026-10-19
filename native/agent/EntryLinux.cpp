@@ -17,6 +17,12 @@
 #include <string>
 #include <string_view>
 
+// The C++ runtime is linked in (xmake.lua), and a newer toolchain's calls glibc 2.38's C23 strtoul: the agent has its
+// own, so a server on an older glibc (Debian 12's 2.36) loads it. __strtoul_internal is strtoul in every glibc.
+extern "C" unsigned long __strtoul_internal(char const* text, char** end, int base, int group);
+
+extern "C" __attribute__((visibility("hidden"))) unsigned long __isoc23_strtoul(char const* text, char** end, int base) noexcept { return __strtoul_internal(text, end, base, 0); }
+
 namespace {
 
 namespace n = bdg::bindings::names;

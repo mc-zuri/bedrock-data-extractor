@@ -193,6 +193,14 @@ int forEachBlockType(std::uintptr_t map, std::function<void(std::string const&, 
     return visited;
 }
 
+std::uintptr_t dropStrategy(std::uintptr_t blockType) {
+    if (std::int64_t const bound = r().offset(n::BlockTypeDropStrategy); bound >= 0) {
+        return readPtr(blockType, bound);
+    }
+    std::int64_t const off = r().offset(n::BlockTypePermutations);
+    return off < 0 ? 0 : readPtr(blockType, off + 0x88);
+}
+
 std::vector<std::uintptr_t> permutations(std::uintptr_t blockType) {
     std::vector<std::uintptr_t> out;
     std::int64_t                off = r().offset(n::BlockTypePermutations);

@@ -1,5 +1,22 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 
+/** The shortest decimal that reads back as the same float32 (what the game's floats are). */
+export function f32(value: number): number {
+  if (!Number.isFinite(value) || Math.fround(value) !== value) {
+    return value
+  }
+
+  for (let precision = 1; precision < 17; precision++) {
+    const candidate = Number(value.toPrecision(precision))
+
+    if (Math.fround(candidate) === value) {
+      return candidate
+    }
+  }
+
+  return value
+}
+
 export function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }

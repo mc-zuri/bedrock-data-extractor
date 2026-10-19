@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { crc32, deflateRawSync } from 'node:zlib'
 import nbt from 'prismarine-nbt'
-import type { Blocks, BlockShapes, BlockState } from '../src/blocks.ts'
+import type { BlockFacts, Blocks, BlockShapes, BlockState, Items, StateFacts } from '../src/blocks.ts'
 import { BEDROCK_DATA_DIR, SCHEMAS_DIR } from '../src/config.ts'
 import type { ReadBlocks } from '../src/extract.ts'
 import { VersionStore, type VersionJson } from '../src/versionStore.ts'
@@ -127,26 +127,294 @@ export function shapesNbt(shapes: BlockShapes): Buffer {
 }
 
 const CUBE = [0, 0, 0, 1, 1, 1]
+const VERSION = 18168865
 
-/** A palette the checks pass (air, stone, and a block of 500 states) and its shapes. */
+// the blocks the checks know, each with one state: its facts where the checks have them
+const KNOWN: [name: string, facts: Partial<StateFacts>][] = [
+  ['minecraft:air', { hardness: 0, lightDampening: 0 }],
+  ['minecraft:stone', { hardness: 1.5, explosionResistance: 6, destroySpeeds: { 'minecraft:diamond_pickaxe': 8 }, harvestedBy: ['minecraft:wooden_pickaxe'] }],
+  ['minecraft:dirt', { hardness: 0.5 }],
+  ['minecraft:bedrock', { hardness: -1 }],
+  ['minecraft:glowstone', { lightEmission: 15 }],
+  ['minecraft:glass', { lightDampening: 0 }],
+  ['minecraft:ice', { friction: 0.98 }],
+  ['minecraft:oak_planks', { flameOdds: 5, burnOdds: 20 }],
+  ['minecraft:oak_stairs', { canContainLiquid: true }],
+]
+
+function stateFacts(name: string, facts: Partial<StateFacts>): StateFacts {
+  const drops: Record<string, string> = { 'minecraft:stone': 'minecraft:cobblestone', 'minecraft:dirt': 'minecraft:dirt' }
+  const item = drops[name]
+  return {
+    data: 0,
+    hardness: 1,
+    explosionResistance: 1,
+    friction: 0.6,
+    flameOdds: 0,
+    burnOdds: 0,
+    lightEmission: 0,
+    lightDampening: 15,
+    canContainLiquid: false,
+    mapColor: [0.4392157, 0.4392157, 0.4392157, 1],
+    destroySpeeds: {},
+    harvestedBy: [],
+    drops: { samples: 64, items: item ? [{ item, aux: 0, data: 0, minCount: 1, maxCount: 1, hits: 64 }] : [] },
+    ...facts,
+  }
+}
+
+function sampleItems(): Items {
+  const known = [
+    { name: 'minecraft:stone', maxStackSize: 64 },
+    { name: 'minecraft:dirt', maxStackSize: 64 },
+    { name: 'minecraft:cobblestone', maxStackSize: 64 },
+    { name: 'minecraft:diamond', maxStackSize: 64 },
+    { name: 'minecraft:egg', maxStackSize: 16 },
+    { name: 'minecraft:bucket', maxStackSize: 16 },
+    { name: 'minecraft:water_bucket', maxStackSize: 1 },
+    { name: 'minecraft:bow', maxStackSize: 1, maxDamage: 384, enchantSlots: 32 },
+    { name: 'minecraft:diamond_sword', maxStackSize: 1, maxDamage: 1561, enchantSlots: 16, tags: ['minecraft:is_sword'], repairItems: ['minecraft:diamond'] },
+    { name: 'minecraft:diamond_pickaxe', maxStackSize: 1, maxDamage: 1561, enchantSlots: 1024 },
+    { name: 'minecraft:wooden_pickaxe', maxStackSize: 1, maxDamage: 59, enchantSlots: 1024 },
+    { name: 'minecraft:crafting_table', maxStackSize: 64 },
+  ]
+  const filler = Array.from({ length: 400 }, (_, i) => ({ name: `minecraft:item_${i}`, maxStackSize: 64 }))
+  return {
+    items: [...known, ...filler].map((item, id) => ({
+      id,
+      descriptionId: `item.${item.name.slice(10)}`,
+      descriptionName: `item.${item.name.slice(10)}.name`,
+      maxDamage: 0,
+      enchantSlots: 0,
+      tags: [],
+      repairItems: [],
+      componentBased: false,
+      ...item,
+    })),
+    aliases: [{ name: 'minecraft:fish', item: 'minecraft:stone' }],
+    complexAliases: [{ name: 'minecraft:log', items: ['minecraft:dirt', 'minecraft:stone'] }],
+    creative: [{ item: 'minecraft:stone', metadata: 0, blockState: 1 }],
+  }
+}
+
+/** A release's blocks the checks pass: the known blocks with a state each, and a block of 500 states; its shapes, facts and items. */
 export function sampleBlocks(): Blocks {
   const color: NbtState[] = Array.from({ length: 500 }, (_, i) => ({ color: { type: 'int', value: i } }))
-  const states: BlockState[] = [
-    { name: 'minecraft:air', states: {}, version: 18168865 },
-    { name: 'minecraft:stone', states: {}, version: 18168865 },
-    ...color.map((s) => ({ name: 'minecraft:wool', states: s, version: 18168865 })),
-  ]
+  const states: BlockState[] = [...KNOWN.map(([name]) => ({ name, states: {}, version: VERSION })), ...color.map((s) => ({ name: 'minecraft:wool', states: s, version: VERSION }))]
   const shapes: BlockShapes = {
     blocks: [
       { name: 'minecraft:air', states: [{ collision: [], visual: [0, 0, 0, 0, 0, 0], ui: [0, 0, 0, 0, 0, 0], outline: [0, 0, 0, 0, 0, 0], camera: null }] },
-      { name: 'minecraft:stone', states: [{ collision: [CUBE], visual: CUBE, ui: CUBE, outline: CUBE, camera: CUBE }] },
+      ...KNOWN.slice(1).map(([name]) => ({ name, states: [{ collision: [CUBE], visual: CUBE, ui: CUBE, outline: CUBE, camera: CUBE }] })),
       {
         name: 'minecraft:wool',
         states: color.map(() => ({ collision: [[0.025, 0, 0.025, 0.975, 0.95000005, 0.975]], visual: CUBE, ui: CUBE, outline: CUBE, camera: CUBE })),
       },
     ],
   }
-  return { palette: paletteNbt(states), states, shapes }
+  const facts: BlockFacts[] = [
+    ...KNOWN.map(([name, f], id) => ({
+      name,
+      id,
+      descriptionId: `tile.${name.slice(10)}`,
+      tags: [],
+      requiresCorrectTool: name === 'minecraft:stone',
+      translucency: name === 'minecraft:glass' ? 1 : 0,
+      defaultState: 0,
+      states: [stateFacts(name, f)],
+    })),
+    {
+      name: 'minecraft:wool',
+      id: KNOWN.length,
+      descriptionId: 'tile.wool',
+      tags: [],
+      requiresCorrectTool: false,
+      translucency: 0.8,
+      defaultState: 0,
+      loot: ['loot_tables/blocks/wool.json'],
+      states: color.map(() => stateFacts('minecraft:wool', { drops: { samples: 0, items: [] } })),
+    },
+  ]
+  return {
+    palette: paletteNbt(states),
+    states,
+    shapes,
+    blocks: { blocks: facts, lootTables: { 'loot_tables/blocks/wool.json': { pools: [] } } },
+    items: sampleItems(),
+    enchantments: {
+      enchantments: Array.from({ length: 30 }, (_, id) => ({
+        id,
+        name: id ? `enchantment_${id}` : 'protection',
+        descriptionId: id ? `enchantment.e${id}` : 'enchantment.protect.all',
+        frequency: 10,
+        tradeable: true,
+        primarySlots: 0xf,
+        secondarySlots: 0,
+        minLevel: 1,
+        maxLevel: 4,
+        minCost: [1, 12, 23, 34],
+        maxCost: [21, 32, 43, 54],
+        incompatible: id === 1 ? [0] : [],
+        treasureOnly: false,
+        discoverable: true,
+      })),
+    },
+    ...sampleSent(),
+  }
+}
+
+const KNOWN_BIOMES = ['ocean', 'plains', 'desert', 'extreme_hills', 'forest', 'taiga', 'swampland', 'river', 'hell', 'the_end']
+const KNOWN_EFFECTS = ['speed', 'slowness', 'haste', 'mining_fatigue', 'strength', 'instant_health', 'instant_damage', 'jump_boost', 'nausea', 'regeneration']
+
+/** What the agent reads of the registries and the server sends a client, as the checks pass it */
+function sampleSent(): Pick<Blocks, 'biomes' | 'effects' | 'enums' | 'tints' | 'recipes' | 'entities' | 'commands' | 'attributes'> {
+  const biomes = [...KNOWN_BIOMES, ...Array.from({ length: 50 }, (_, i) => `biome_${i}`)].map((name, id) => ({ name, id }))
+  const harmful = new Set([2, 7, 19, 25])
+  const effects = Array.from({ length: 30 }, (_, i) => {
+    const id = i + 1
+    const name =
+      id === 25 ? 'fatal_poison' : id === 26 ? 'conduit_power' : id === 29 ? 'village_hero' : id === 19 ? 'poison' : (KNOWN_EFFECTS[i] ?? `effect_${String.fromCharCode(97 + i)}`)
+    return { id, name, descriptionId: `potion.${name}`, harmful: harmful.has(id) }
+  })
+
+  function names(list: string[], from = 0): { id: number; name: string }[] {
+    return list.map((name, i) => ({ id: from + i, name }))
+  }
+
+  function crafting(id: number): string {
+    return id ? `minecraft:item_${id}` : 'minecraft:crafting_table'
+  }
+
+  function definition(identifier: string): { description: { identifier: string } } {
+    return { description: { identifier } }
+  }
+
+  return {
+    biomes: {
+      biomes: biomes
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((b) => (b.name === 'plains' ? { ...b, definition: { temperature: 0.8, downfall: 0.4, depth: 0.125, rain: true, mapWaterColor: 0x44aff5, tags: ['plains'] } } : b)),
+    },
+    effects: { effects },
+    enums: {
+      sounds: names(['item.use.on', 'hit', 'step']),
+      particles: names(['bubble'], 1),
+      containers: names(['INVENTORY', 'CONTAINER', 'WORKBENCH', 'FURNACE'], -1),
+      instruments: names(['note.harp', 'note.bd']),
+      mapDecorations: [],
+      containerNames: names(['hotbar_and_inventory', 'crafting_input', 'cursor']),
+      explorationMarkers: [{ id: 15, name: 'monument' }],
+    },
+    tints: { biomes: [{ name: 'plains', grass: 0x91bd59, foliage: 0x77ab2f, water: 0x44aff5 }], redstone: [], constant: [] },
+    recipes: {
+      recipes: Array.from({ length: 1000 }, (_, id) => ({
+        type: id ? ('shapeless' as const) : ('shaped' as const),
+        id: `recipe_${id}`,
+        block: 'crafting_table',
+        ...(id ? {} : { width: 2, height: 2 }),
+        input: id ? [{ item: 'minecraft:dirt', count: 1 }] : Array.from({ length: 4 }, () => ({ tag: 'minecraft:planks', count: 1 })),
+        output: [{ item: crafting(id % 400), metadata: 0, count: 1, blockState: null }],
+      })),
+    },
+    entities: {
+      entities: ['player', 'zombie', 'cow', ...Array.from({ length: 100 }, (_, i) => `entity_${i}`)].map((name, id) => ({
+        name: `minecraft:${name}`,
+        id,
+        hasSpawnEgg: id > 0,
+        summonable: id > 0,
+      })),
+      definitions: { 'minecraft:cow': definition('minecraft:cow'), 'minecraft:player': definition('minecraft:player'), 'minecraft:zombie': definition('minecraft:zombie') },
+      lootTables: { 'loot_tables/entities/zombie.json': { pools: [] } },
+    },
+    commands: {
+      commands: ['teleport', ...Array.from({ length: 40 }, (_, i) => `command_${i}`)].map((name) => ({
+        name,
+        description: `commands.${name}.description`,
+        aliases: name === 'teleport' ? ['tp'] : [],
+        help: [`${name}:`, 'Does it.', `- /${name}`],
+      })),
+      enums: { GameMode: ['survival', 'creative'] },
+    },
+    attributes: {
+      attributes: [
+        { name: 'minecraft:health', min: 0, max: 20, default: 20, value: 20 },
+        { name: 'minecraft:movement', min: 0, max: 3.4028235e38, default: 0.1, value: 0.1 },
+      ],
+    },
+  }
+}
+
+type Tag = { type: string; value: unknown }
+
+function str(value: string): Tag {
+  return { type: 'string', value }
+}
+
+function int(value: number): Tag {
+  return { type: 'int', value }
+}
+
+function strings(values: string[]): Tag {
+  return { type: 'list', value: { type: 'string', value: values } }
+}
+
+function compounds(values: Record<string, Tag>[]): Tag {
+  return { type: 'list', value: { type: 'compound', value: values } }
+}
+
+/** `blocks` as the agent writes them (blocks.nbt), the loot left out: the extractor reads that from the server's packs */
+export function blocksNbt(blocks: BlockFacts[]): Buffer {
+  const value = blocks.map((b) => ({
+    name: str(b.name),
+    id: int(b.id),
+    defaultState: int(b.defaultState),
+    descriptionId: str(b.descriptionId),
+    requiresCorrectTool: { type: 'byte', value: b.requiresCorrectTool ? 1 : 0 },
+    tags: strings(b.tags),
+    translucency: { type: 'float', value: b.translucency },
+    states: compounds(
+      b.states.map((s) => ({
+        data: int(s.data),
+        hardness: { type: 'float', value: s.hardness },
+        explosionResistance: { type: 'float', value: s.explosionResistance },
+        friction: { type: 'float', value: s.friction },
+        flameOdds: int(s.flameOdds),
+        burnOdds: int(s.burnOdds),
+        lightEmission: int(s.lightEmission),
+        lightDampening: int(s.lightDampening),
+        canContainLiquid: { type: 'byte', value: s.canContainLiquid ? 1 : 0 },
+        mapColor: { type: 'list', value: { type: 'float', value: s.mapColor } },
+        destroySpeeds: compounds(Object.entries(s.destroySpeeds).map(([item, speed]) => ({ item: str(item), speed: { type: 'float', value: speed } }))),
+        harvestedBy: strings(s.harvestedBy),
+        samples: int(s.drops.samples),
+        drops: compounds(
+          s.drops.items.map((d) => ({ item: str(d.item), aux: int(d.aux), data: int(d.data), minCount: int(d.minCount), maxCount: int(d.maxCount), hits: int(d.hits) })),
+        ),
+      })),
+    ),
+  }))
+  return nbt.writeUncompressed({ type: 'compound', name: '', value: { blocks: compounds(value) } } as nbt.NBT, 'big')
+}
+
+/** `items` as the agent writes them (items.nbt) */
+export function itemsNbt(items: Items): Buffer {
+  const value = {
+    items: compounds(
+      items.items.map((i) => ({
+        name: str(i.name),
+        id: int(i.id),
+        descriptionId: str(i.descriptionId),
+        descriptionName: str(i.descriptionName),
+        maxStackSize: int(i.maxStackSize),
+        maxDamage: int(i.maxDamage),
+        enchantSlots: int(i.enchantSlots),
+        tags: strings(i.tags),
+        repairItems: strings(i.repairItems),
+      })),
+    ),
+    aliases: compounds(items.aliases.map((a) => ({ name: str(a.name), item: str(a.item) }))),
+    complexAliases: compounds(items.complexAliases.map((a) => ({ name: str(a.name), items: strings(a.items) }))),
+  }
+  return nbt.writeUncompressed({ type: 'compound', name: '', value } as nbt.NBT, 'big')
 }
 
 /** What reads a release's blocks, where no server runs: `answer` for every zip (an Error: thrown). Each call is noted in `calls`. */

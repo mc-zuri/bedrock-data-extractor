@@ -22,7 +22,7 @@ if is_plat("windows") then
         set_kind("shared")
         add_deps("bdg_bindings")
         add_packages("zydis")
-        add_files("game/*.cpp", "export/*.cpp", "agent/Agent.cpp", "agent/EntryWindows.cpp", "memory/Hook.cpp")
+        add_files("game/*.cpp", "export/*.cpp", "agent/Agent.cpp", "agent/EntryWindows.cpp", "memory/Hook.cpp", "memory/Flow.cpp", "memory/Code.cpp")
         -- SEH-guarded foreign calls sit next to C++ objects
         set_exceptions("none")
         add_cxflags("/EHa", "/utf-8", "/W4", "/permissive-")
@@ -53,8 +53,10 @@ elseif is_plat("linux") then
         set_kind("shared")
         add_deps("bdg_bindings")
         add_packages("zydis")
-        add_files("game/*.cpp", "export/*.cpp", "agent/Agent.cpp", "agent/EntryLinux.cpp", "memory/Hook.cpp")
-        add_ldflags("-static-libstdc++", "-static-libgcc")
+        add_files("game/*.cpp", "export/*.cpp", "agent/Agent.cpp", "agent/EntryLinux.cpp", "memory/Hook.cpp", "memory/Flow.cpp", "memory/Code.cpp")
+        -- a shared library's link flags are shflags; their symbols stay its own, so the server's older system
+        -- libstdc++ (Debian 12's) is never asked for
+        add_shflags("-static-libstdc++", "-static-libgcc", "-Wl,--exclude-libs,ALL")
         add_syslinks("dl", "pthread")
 
     -- resolves the name bindings against a server on disk, without starting it

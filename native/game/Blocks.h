@@ -57,4 +57,34 @@ bool hasCameraShape();
 // The box the camera collides with, or none; nullopt when the game's call fails or hangs.
 std::optional<std::optional<AABB>> cameraShape(World const& world, BlockType const& type, std::uintptr_t state);
 
+// What a state is made of. Builds that keep a fact on the block type give every state of the type the same.
+struct StateFacts {
+    float hardness;  // the destroy speed: how long it takes to dig; -1 where it cannot be dug
+    float explosionResistance;
+    float friction;
+    int   flameOdds;         // how readily fire catches on it
+    int   burnOdds;          // how readily fire burns it away
+    int   lightEmission;     // 0 - 15
+    int   lightDampening;    // 0 - 15: how much light it takes away passing through
+    int   data;              // its data value (Block::mData)
+    bool  canContainLiquid;  // it can be waterlogged
+    bool  operator==(StateFacts const&) const = default;
+};
+
+struct BlockFacts {
+    int                      id;                   // the block's numeric id: air 0, stone 1, dirt 3
+    std::string              descriptionId;        // "tile.stone"; the language file has it + ".name"
+    bool                     requiresCorrectTool;  // it drops only when dug by an item whose canDestroySpecial holds
+    std::vector<std::string> tags;                 // "minecraft:stone": sorted, with their namespace
+    float                    translucency;
+    std::vector<StateFacts>  states;  // in the type's state order
+};
+
+struct AllBlockFacts {
+    std::vector<BlockFacts> types;  // in the order of the types asked about
+    std::string             error;  // why they do not read right; then there are none
+};
+
+AllBlockFacts blockFacts(std::vector<BlockType> const& types);
+
 }

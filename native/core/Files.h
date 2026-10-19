@@ -7,7 +7,6 @@
 
 namespace bdg::files {
 
-// `dir` and `name` joined with the OS's separator
 std::string join(std::string const& dir, std::string const& name);
 
 // Through a temporary file moved over `path`: never half a file.

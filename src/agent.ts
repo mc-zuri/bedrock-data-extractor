@@ -1,32 +1,78 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { joinServer, type Sent } from './client.ts'
+import { commandHelp } from './commandHelp.ts'
 import type { Host } from './platform.ts'
-import { start } from './server.ts'
+import { start, transportOf, type RunningServer } from './server.ts'
 
-const AGENT_TIMEOUT_MS = 600_000
+// the slowest builds draw their drops for minutes (1.20.61: ten alone, more beside other servers)
+const AGENT_TIMEOUT_MS = 1_800_000
+// for the ticking area's chunks to load
+const CHUNK_LOAD_MS = 3_000
 
-export async function runAgent(serverDir: string, build: string, host: Host, out: string): Promise<string> {
+const TICKING_AREA = 'tickingarea add 1024 0 1024 1039 0 1039 bdg'
+const ADDED = ['Added ticking area', 'already exists']
+
+// The agent sets blocks to draw their drops and ask their map colours, in a chunk a ticking area keeps loaded (a server
+// without players loads none), far from the world origin, where the shapes are asked with no chunk around
+// (native/game/Drops.cpp). Before 1.17.0 the console runs no command in a dimension: the joined player runs it.
+async function keepChunksLoaded(server: RunningServer): Promise<void> {
+  for (let tries = 0; ; tries++) {
+    const said = await server.command(`execute @a ~ ~ ~ ${TICKING_AREA}`, [...ADDED, 'No targets'])
+
+    if (said !== 'No targets') {
+      return
+    }
+
+    if (tries === 30) {
+      throw new Error('the joined player never came into the world')
+    }
+
+    await sleep(1_000)
+  }
+}
+
+export interface AgentRun {
+  /** what the agent wrote ("ok ..." without its ok) */
+  result: string
+  sent: Sent
+  /** the console's help for each command the client was sent */
+  help: Record<string, string[]>
+}
+
+export async function runAgent(serverDir: string, build: string, host: Host, out: string): Promise<AgentRun> {
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
 
   const result = join(out, 'result.txt')
-  const server = await start(serverDir, host, { ...host.agentEnv, BDG_VERSION: build, BDG_OUT: out })
+  const server = await start(serverDir, host, { ...host.agentEnv, BDG_VERSION: build, BDG_OUT: out }, transportOf(build))
 
   try {
+    const inDimension = (await server.command(TICKING_AREA, [...ADDED, 'dimension not found'])) !== 'dimension not found'
+    const sent = await joinServer(build, server, async () => {
+      if (!inDimension) {
+        await keepChunksLoaded(server)
+      }
+    })
+    // before the agent: after the long draws of 1.16.201's (unoptimized) server, its console answers no more
+    const help = await commandHelp(
+      server,
+      sent.commands.commands.map((c) => c.name),
+    )
+    await sleep(CHUNK_LOAD_MS)
     await host.attach(server.pid, out)
     await waitForFile(result, server.exited, AGENT_TIMEOUT_MS)
+    const text = readFileSync(result, 'utf8').trim()
+
+    if (!text.startsWith('ok')) {
+      throw new Error(`the agent: ${text.replace(/^FAILED: /, '')} (see ${join(out, 'agent.log')})`)
+    }
+
+    return { result: text.replace(/^ok /, ''), sent, help }
   } finally {
     await server.kill()
   }
-
-  const text = readFileSync(result, 'utf8').trim()
-
-  if (!text.startsWith('ok')) {
-    throw new Error(`the agent: ${text.replace(/^FAILED: /, '')} (see ${join(out, 'agent.log')})`)
-  }
-
-  return text.replace(/^ok /, '')
 }
 
 async function waitForFile(file: string, exited: Promise<number | null>, timeoutMs: number): Promise<void> {

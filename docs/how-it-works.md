@@ -28,6 +28,7 @@ A build is named as its zip names it: `1.21.42.01` (`bedrock-server-1.21.42.01.z
 pnpm track [builds...] [--channel=preview] [--force]
 pnpm support <builds...> [--platform=linux|windows]
 pnpm extract [builds...] [--force]
+pnpm steve <builds...> [--port=19150] [--force] | pnpm steve --import=<dir> [builds...]
 pnpm native
 pnpm check <builds...> [--platform=linux|windows]
 pnpm status
@@ -47,9 +48,15 @@ pnpm status
   1. downloads the zip of the platform it is supported on (linux's where both are) into `CACHE_DIR`;
   2. refuses it unless it is the zip `versions/` hashed;
   3. reads its language out of the zip, without unpacking it: each resource pack's `texts/en_US.lang`;
-  4. unpacks its server, starts it on a new world, and has the agent write its blocks: the palette and each state's
-     shapes ([Agent](#agent));
-  5. checks the data (`src/checks.ts`);
+  4. unpacks its server, starts it on a new flat world, joins it with a client (what the server sends a client: the
+     item registry, the creative list and item_component; the biome definitions, the entity identifiers, the crafting
+     recipes, the commands, and the player's attributes), has its console answer `help <command>` for each command sent
+     (with cheats allowed: `changesetting allow-cheats true`), has the agent write what the game says of its blocks,
+     items, enchantments, biomes, mob effects, enums and tints ([Agent](#agent)), and reads the vanilla behavior packs'
+     definitions of blocks and entities and the loot tables they name;
+  5. checks the data (`src/checks.ts`); before 1.26.20, what a Linux server gives otherwise than the Windows server
+     only because their compilers round a float otherwise is made the Windows server's (`asOnWindows`: the chests' top
+     `0.95`, not `0.95000005`; from 1.21.42, 21 blocks' explosion resistance, `4.2000003`, not `4.2`);
   6. writes it into bedrock-data, with `build.json`: the release, each zip's URL, sha256 and size, and which platform
      each kind was read from.
 
@@ -57,6 +64,12 @@ pnpm status
   this machine's is left for one that runs it (named, it fails). A zip and its server are deleted once the release is
   done; one that failed keeps them, and the agent's log. `JOBS` builds at a time, each server on ports of its own.
 
+- **steve** (by hand) keeps each named release's default skin (Steve), which no server holds: it listens on `--port`
+  (19150) as a server of the release's version (bedrock-protocol's, no BDS: the skin is in the first packet a client
+  sends) until a person joins with a real client of that version and the default skin, and writes the skin, every
+  persona id in it made a fixed one (the account's is not kept), into `release/<build>/steve.json.gz` and its entry in
+  `build.json`, one release at a time. `--import=<dir>` takes earlier captures instead, `<dir>/<build>/steve.json` (every
+  release that has one, unless builds are named). The release must be extracted first; extract keeps its steve.
 - **native** builds the agent for this machine's OS; **check** resolves its bindings against each named release's
   server without starting it, and prints every binding where one is named.
 - **status** prints each tracked build, each platform as `supported`, `zip` (not supported) or `-` (no zip), and
@@ -69,14 +82,44 @@ The blocks are what the running server says, so they are read inside it: `native
 - **Windows**: `bdg_inject.exe` loads `bdg_agent.dll` into `bedrock_server.exe` once it prints "Server started".
 - **Linux**: `libbdg_agent.so` is preloaded (`LD_PRELOAD`), and starts once node writes `<out>/go`.
 
+Before it is loaded, node adds a ticking area (`tickingarea add`), so a chunk far from the world origin stays loaded
+with no player there: the agent sets blocks in it. Before 1.17.0 the console runs no command in a dimension, and the
+joined client's player runs it (`execute @a`). The client is bedrock-protocol's, joining as the build's version (else
+as the protocol the server advertises).
+
 It binds what it calls for the running build (`native/bindings/`: Windows by byte patterns, slots and offsets; Linux
 by the server's own symbols where it ships them, 1.16.201 to 1.21.2 but 1.17.0, else as Windows), hooks `Level::tick`,
-and on the tick finds the overworld (creating it where it does not exist yet) and walks the block type registry: every
-block type and its states in runtime id order. For each state it writes the game's own CompoundTag
-(`block_palette.nbt`) and asks the game for its shapes (`block_shapes.nbt`): the collision boxes (at the origin and 16
-blocks away), the visual and UI boxes, the outline, and from 1.20.30 the camera box. Each call runs on a worker thread
-with a deadline, and a fault in the game is caught; either fails the export, never the server's tick. Then it writes
-`result.txt`, and node kills the server.
+and on the tick finds the overworld (creating it where it does not exist yet), the block type registry (every block
+type and its states in runtime id order) and the item registry. Then it writes:
+
+- `block_palette.nbt`: each state's own CompoundTag;
+- `block_shapes.nbt`: each state's shapes, asked of the game: the collision boxes (at the origin and 16 blocks away),
+  the visual and UI boxes, the outline, and from 1.20.30 the camera box;
+- `blocks.nbt`: each block type's and state's facts (read from the BlockLegacy and each Block: numeric id, hardness,
+  friction, light, fire odds, ...), what every item does to each state (`Item::getDestroySpeed`,
+  `Item::canDestroySpecial`), each state's drops (the game's drop code, drawn again and again from a Random it seeds by
+  the block's name, with the block set in the loaded chunk where it keeps a block actor) and map colour
+  (`Block::getMapColor` with the state set in the loaded chunk, a fresh sub-chunk every 2048 states: a sub-chunk's
+  palette takes no more than 4096; where a build has it inline in its callers, the parts they call, read from their
+  code: the block's map colour component tinted by its tint method's sampler, else `BlockLegacy::getMapColor`);
+- `items.nbt`: each registered item: its id, stack size, durability, enchant slots, tags and repair items, its name as
+  the game builds it (`Item::buildDescriptionName` of a stack of one: the server's en_US name, or the key where that
+  has none), and a food's legacy food component where the build keeps one;
+- `enchantments.nbt`: each enchantment: its slots, levels, costs and the ones it does not go with;
+- `biomes.nbt`: each biome of the registry by name with its numeric id, found among what the Level reaches;
+- `effects.nbt`: each mob effect (the static `MobEffect` array, by id) with its name, language key and harm;
+- `enums.nbt`: the names the game keeps for its sound events, particle types, container types, note block
+  instruments, item stack request containers and map decorations, and the decoration types exploration maps mark;
+- `tints.nbt`: each biome's grass, foliage and water colours, the redstone wire's in each state and the block types of
+  one colour, each from the game's own colour functions (found by their code).
+
+The console's help is asked before the agent is loaded: after 1.16.201's long draws (an unoptimized build) its console
+answers no more.
+
+What no binding names is found by content (a member: the one offset where blocks of known values read them) or by its
+code and what it answers (a virtual: its slot's code, then known answers), as `game/` says of each. Each call runs
+guarded, the shape calls on a worker thread with a deadline; a fault in the game fails the export, never the server's
+tick. Then it writes `result.txt`, and node kills the server.
 
 A platform's server answers as its build does, so the platforms can disagree; bedrock-data's README lists where, and
 `build.json` says which platform each file came from.
@@ -92,4 +135,6 @@ A platform's server answers as its build does, so the platforms can disagree; be
 
 `.env` (see `.env.example`): `BEDROCK_DATA_DIR` (default `../bedrock-data`), `CACHE_DIR` (default `cache`), `JOBS`
 (default 3), `SERVER_PORT_BASE` (default 41032). On Linux, the servers before 1.19.40 need OpenSSL 1.1 on
-`LD_LIBRARY_PATH`.
+`LD_LIBRARY_PATH`. The client speaks RakNet through raknet-native's prebuilt binaries (patched to take another OS
+release's of the same platform, as a newer kernel has none of its own: `patches/`). From 1.26.52 a server takes only
+NetherNet: the client finds it on the LAN port every such server binds (UDP 7551), so those servers run one at a time.

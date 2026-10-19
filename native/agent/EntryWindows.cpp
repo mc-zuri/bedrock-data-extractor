@@ -26,7 +26,6 @@ int noteFault(EXCEPTION_POINTERS const* e) {
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
-// where: an offset into the module it is in (the agent's, the server's)
 void faulted() {
     auto const at             = reinterpret_cast<std::uintptr_t>(gFault.ExceptionAddress);
     HMODULE    module         = nullptr;

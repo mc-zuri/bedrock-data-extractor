@@ -2,10 +2,12 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { BEDROCK_DATA_DIR, CACHE_DIR, JOBS, SCHEMAS_DIR, VERSIONS_DIR } from './config.ts'
 import { DataRepo } from './dataRepo.ts'
+import { checkSteve } from './checks.ts'
 import { exportPlatform, extract, isExtracted, trackedZip, workDir } from './extract.ts'
 import { fetchLinks } from './mojang.ts'
 import { agentHost, host, hostPlatform } from './platform.ts'
 import { unpackServer } from './server.ts'
+import { importedSkin, recordedSkin, STEVE_FILE } from './steve.ts'
 import { support } from './support.ts'
 import { isTracked, targetName, track, type Target } from './track.ts'
 import { errorMessage, forEach } from './util.ts'
@@ -39,6 +41,11 @@ const steps: Record<string, Step> = {
   extract: {
     about: 'each supported release bedrock-data has not got the data of (or the builds named): its data into bedrock-data (--force: again, where it has)',
     run: extractBuilds,
+  },
+  steve: {
+    about:
+      "<build...> [--port=19150] [--force]: the default skin of a real client of each release's version, which joins this machine once, into bedrock-data; --import=<dir> [build...]: each one's from <dir>/<build>/steve.json",
+    run: steveBuilds,
   },
   native: { about: 'builds the native agent (xmake) for the OS of this machine', run: () => host().buildAgent() },
   check: {
@@ -174,6 +181,47 @@ async function extractBuilds({ builds, force }: Options): Promise<string[]> {
 
   if (repo.writeVersions()) {
     console.log('  versions.json written')
+  }
+
+  return failed
+}
+
+// the port a client joins to have its skin kept
+const STEVE_PORT = 19150
+
+/** steve: each release's default skin, recorded from a client (one at a time: a person joins each) or imported */
+async function steveBuilds({ builds, force, values }: Options): Promise<string[]> {
+  checkNames(builds)
+  const repo = new DataRepo(BEDROCK_DATA_DIR)
+  const dir = values.get('import')
+  const port = Number(values.get('port') ?? STEVE_PORT)
+  const todo = builds.length ? builds : dir ? repo.builds().filter((build) => importedSkin(dir, build)) : []
+
+  if (!todo.length) {
+    throw new Error('steve: name the releases (or --import=<dir>, which takes every one it has)')
+  }
+
+  const failed: string[] = []
+
+  for (const build of todo) {
+    try {
+      if (!dir && !force && repo.readBuild(build)?.data.steve) {
+        console.log(`  release/${build}: ${STEVE_FILE} already there`)
+        continue
+      }
+
+      const skin = dir ? importedSkin(dir, build) : await recordedSkin(build, port)
+
+      if (!skin) {
+        throw new Error(`no ${join(dir ?? '', build, 'steve.json')}`)
+      }
+
+      checkSteve(skin)
+      console.log(`  release/${build}: ${repo.writeSteve(build, skin) ? `${STEVE_FILE} written` : 'unchanged'}`)
+    } catch (e) {
+      failed.push(`release/${build}`)
+      console.log(`  release/${build}: FAILED: ${errorMessage(e)}`)
+    }
   }
 
   return failed

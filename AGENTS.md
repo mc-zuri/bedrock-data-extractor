@@ -6,9 +6,12 @@ writes.
 ## Invariants
 
 - **Each file has one writer.** `versions/`: `pnpm track`, except each zip's `"supported"`: `pnpm support`, through
-  a pull request. bedrock-data: `pnpm extract`. Never hand-edit any of them, never add an override layer of
+  a pull request. bedrock-data: `pnpm extract`, but each release's `steve.json.gz`: `pnpm steve`, run by a person (a
+  real client joins it). Never hand-edit any of them, never add an override layer of
   corrections: where extracted data disagrees with another source, find out why and fix the extraction, or document
-  the disagreement.
+  the disagreement. The one exception: before 1.26.20, what a Linux server gives otherwise than the Windows server
+  only because their compilers round a float otherwise is written as Windows gives it (`asOnWindows`: the chests' top,
+  21 blocks' explosion resistance), so minecraft-data's files do not depend on the platform a release was read from.
 - **A run changes files only where the game says otherwise.** No timestamps, no extractor version, no
   machine-dependent bytes (gzip is rewritten only where its decompressed text changed). `pnpm track` with nothing new,
   or `pnpm extract` with nothing unexported, must leave both repos' `git status` clean.
@@ -26,8 +29,10 @@ writes.
   or file changes its schema, and for bedrock-data its README, together with the code that writes it.
 - **Previews are tracked, never supported.**
 - **The agent binds, it never guesses.** Each build's bindings are steps in `native/bindings/`; a pattern must match
-  once, a slot and an offset are checked by what the game answers (`src/checks.ts`). A build the agent cannot bind
-  fails support, never exports a wrong value.
+  once, a slot and an offset are checked by what the game answers (`src/checks.ts`). What the agent finds itself is
+  found only where one place fits what known blocks and items read or answer, and is checked the same; a function is
+  called to find it only once its code says it is the one (`memory/Flow.h`), as a wrong call can end the server. A
+  build the agent cannot bind fails support, never exports a wrong value.
 
 ## Conventions
 

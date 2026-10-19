@@ -1,0 +1,11 @@
+# The client that joins each server (src/client.ts) speaks RakNet through raknet-native, whose prebuilt binaries are
+# in its package, one per platform and OS release; the patch has it load another release's of the same platform where
+# its own is missing (a newer Linux kernel), so its install script, which would build one, need not run.
+allowBuilds:
+  raknet-native: false
+
+# bedrock-protocol takes prismarine-xbox-services from git (it is not on npm)
+blockExoticSubdeps: false
+
+patchedDependencies:
+  raknet-native@1.2.3: patches/raknet-native@1.2.3.patch

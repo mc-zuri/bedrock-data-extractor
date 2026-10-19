@@ -1,8 +1,8 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { PALETTE_FILE, readBlocks, SHAPES_FILE, type Blocks } from './blocks.ts'
+import { asOnWindows, BLOCKS_FILE, ENCHANTMENTS_FILE, ITEMS_FILE, PALETTE_FILE, readBlocks, SHAPES_FILE, type Blocks } from './blocks.ts'
 import { checkLanguage } from './checks.ts'
-import type { BuildJson, DataRepo } from './dataRepo.ts'
+import { KINDS, type BuildJson, type DataRepo, type Kind } from './dataRepo.ts'
 import { download } from './download.ts'
 import { LANGUAGE_FILE, readLanguage, type Language } from './language.ts'
 import type { VersionJson, VersionStore } from './versionStore.ts'
@@ -21,7 +21,16 @@ export function exportPlatform(version: VersionJson): Platform | undefined {
 
 export function isExtracted(repo: DataRepo, build: string): boolean {
   const data = repo.readBuild(build)?.data
-  return [data?.language, data?.blockPalette, data?.blockShapes].every((kind) => kind && repo.has(build, kind.file))
+  const kinds = [
+    data?.language,
+    data?.blockPalette,
+    data?.blockShapes,
+    data?.blocks,
+    data?.items,
+    data?.enchantments,
+    ...(Object.keys(KINDS) as Kind[]).map((kind) => data?.[kind]),
+  ]
+  return kinds.every((kind) => kind && repo.has(build, kind.file))
 }
 
 export function cacheDir(cache: string, build: string): string {
@@ -58,10 +67,8 @@ export async function readRelease(version: VersionJson, platform: Platform, cach
   const zip = await trackedZip(version, platform, cache)
   const language = await readLanguage(zip)
   checkLanguage(language)
-  return {
-    language,
-    blocks: await blocks(zip, version.build, platform, workDir(cache, version.build, platform)),
-  }
+  const read = await blocks(zip, version.build, platform, workDir(cache, version.build, platform))
+  return { language, blocks: asOnWindows(read, version.build, platform) }
 }
 
 export async function extract(repo: DataRepo, store: VersionStore, build: string, force: boolean, cache: string, blocks: ReadBlocks = readBlocks): Promise<string | undefined> {
@@ -97,6 +104,24 @@ export async function extract(repo: DataRepo, store: VersionStore, build: string
     changed.push(SHAPES_FILE)
   }
 
+  if (repo.writeBlocks(build, release.blocks.blocks)) {
+    changed.push(BLOCKS_FILE)
+  }
+
+  if (repo.writeItems(build, release.blocks.items)) {
+    changed.push(ITEMS_FILE)
+  }
+
+  if (repo.writeEnchantments(build, release.blocks.enchantments)) {
+    changed.push(ENCHANTMENTS_FILE)
+  }
+
+  for (const kind of Object.keys(KINDS) as Kind[]) {
+    if (repo.writeKind(build, kind, release.blocks[kind])) {
+      changed.push(KINDS[kind].file)
+    }
+  }
+
   for (const platform of PLATFORMS) {
     const zip = version.binary[platform]
 
@@ -105,6 +130,8 @@ export async function extract(repo: DataRepo, store: VersionStore, build: string
     }
   }
 
+  // a steve recorded before stays: extract does not record it
+  const steve = repo.readBuild(build)?.data.steve
   const json: BuildJson = {
     build,
     version: version.version,
@@ -117,6 +144,11 @@ export async function extract(repo: DataRepo, store: VersionStore, build: string
       },
       blockPalette: { file: PALETTE_FILE, from },
       blockShapes: { file: SHAPES_FILE, from },
+      blocks: { file: BLOCKS_FILE, from },
+      items: { file: ITEMS_FILE, from },
+      enchantments: { file: ENCHANTMENTS_FILE, from },
+      ...Object.fromEntries((Object.keys(KINDS) as Kind[]).map((kind) => [kind, { file: KINDS[kind].file, from }])),
+      ...(steve ? { steve } : {}),
     },
   }
 

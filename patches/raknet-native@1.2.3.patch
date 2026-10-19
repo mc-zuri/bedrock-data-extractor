@@ -1,0 +1,14 @@
+diff --git a/binding.js b/binding.js
+index 7749ff794e5b446ca545cfac55d58c9bf8f13bb1..628f756168f4c27edc5f0c0e2b26fdd213568974 100644
+--- a/binding.js
++++ b/binding.js
+@@ -15,7 +15,8 @@ if (!process.versions.electron) {
+ }
+ 
+ let bindings
+-const pathsToSearch = [helper.getPath()]
++// the prebuild of this OS release, else of another release of this platform and arch (a newer kernel)
++const pathsToSearch = [helper.getPath(), helper.getFallbackPath()].filter(Boolean)
+ for (const importPath of pathsToSearch) {
+   try {
+     bindings = require(importPath)

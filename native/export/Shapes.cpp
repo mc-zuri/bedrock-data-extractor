@@ -67,7 +67,6 @@ Result exportShapes(Context const& context) {
                 if (!box) {
                     return {false, std::format("no camera shape for {} #{}", type.name, i)};
                 }
-                // none or one box
                 shapes.header(List, "camera");
                 writeBoxes(shapes, *box ? std::vector<game::AABB>{**box} : std::vector<game::AABB>{});
             }
