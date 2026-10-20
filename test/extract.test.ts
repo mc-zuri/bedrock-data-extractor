@@ -65,6 +65,20 @@ void test('a release supported only on windows is read out of its windows zip', 
   assert.match((await extract(repo, store, BUILD, false, cache, fakeBlocks())) ?? '', /from windows/)
 })
 
+void test("a pack's en_US.lang the linux zip lacks is read from the windows zip: 1.16.220.02's chemistry", async () => {
+  const linux = { 'resource_packs/vanilla/texts/en_US.lang': VANILLA, 'resource_packs/chemistry/contents.json': '{ "content": [{ "path": "texts/en_US.lang" }] }' }
+  const { store, cache } = cachedRelease(BUILD, { linux, windows: VANILLA }, ['linux'])
+  const repo = new DataRepo(emptyDataRepo())
+  const blocks = fakeBlocks()
+  assert.match((await extract(repo, store, BUILD, false, cache, blocks)) ?? '', /from linux/)
+  assert.deepEqual(blocks.calls, [{ build: BUILD, platform: 'linux' }])
+  const language = JSON.parse(gunzipped(repo, 'language.json.gz').toString('utf8')) as Language
+  assert.deepEqual(Object.keys(language.packs), ['vanilla', 'chemistry'])
+  assert.deepEqual(language.packs.chemistry, { 'item.element_1.name': 'Hydrogen' })
+  assert.deepEqual(repo.readBuild(BUILD)?.data.language, { file: 'language.json.gz', from: 'linux' })
+  assert.ok(!existsSync(join(cache, 'release', BUILD)), 'both zips are deleted once it is done')
+})
+
 void test('a release supported on no platform is refused', async () => {
   const { store, cache } = cachedRelease(BUILD, { linux: VANILLA })
   await assert.rejects(extract(new DataRepo(emptyDataRepo()), store, BUILD, false, cache, fakeBlocks()), /supported on no platform: pnpm support 1\.26\.52\.3/)

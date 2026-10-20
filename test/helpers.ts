@@ -69,12 +69,12 @@ export const VANILLA = Array.from({ length: 6000 }, (_, i) => `tile.block_${i}.n
 
 /**
  * A tracked release whose zips are already in the cache, as finished downloads leave them: nothing is fetched.
- * `zips`: each platform's vanilla en_US.lang; `supported`: the platforms marked so; `wrongSha`: those tracked with
- * another zip's sha256.
+ * `zips`: each platform's vanilla en_US.lang, or every file of its zip; `supported`: the platforms marked so;
+ * `wrongSha`: those tracked with another zip's sha256.
  */
 export function cachedRelease(
   build: string,
-  zips: Partial<Record<Platform, string>>,
+  zips: Partial<Record<Platform, string | Record<string, string>>>,
   supported: Platform[] = [],
   wrongSha: Platform[] = [],
 ): { store: VersionStore; cache: string } {
@@ -82,10 +82,13 @@ export function cachedRelease(
   const store = new VersionStore(join(tempDir(), 'versions'), SCHEMAS_DIR)
   const binary: VersionJson['binary'] = {}
 
-  for (const [platform, vanilla] of Object.entries(zips) as [Platform, string][]) {
+  for (const [platform, files] of Object.entries(zips) as [Platform, string | Record<string, string>][]) {
     const zip = join(cache, 'release', build, `${platform}.zip`)
     mkdirSync(dirname(zip), { recursive: true })
-    writeZip(zip, { 'resource_packs/vanilla/texts/en_US.lang': vanilla, 'resource_packs/chemistry/texts/en_US.lang': 'item.element_1.name=Hydrogen\n' })
+    writeZip(
+      zip,
+      typeof files === 'string' ? { 'resource_packs/vanilla/texts/en_US.lang': files, 'resource_packs/chemistry/texts/en_US.lang': 'item.element_1.name=Hydrogen\n' } : files,
+    )
     const sha256 = wrongSha.includes(platform) ? 'd'.repeat(64) : createHash('sha256').update(readFileSync(zip)).digest('hex')
     binary[platform] = { url: zipUrl(build, 'release', platform), sha256, size: statSync(zip).size, supported: supported.includes(platform) }
   }

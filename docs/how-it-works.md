@@ -47,7 +47,9 @@ pnpm status
   builds named), and:
   1. downloads the zip of the platform it is supported on (linux's where both are) into `CACHE_DIR`;
   2. refuses it unless it is the zip `versions/` hashed;
-  3. reads its language out of the zip, without unpacking it: each resource pack's `texts/en_US.lang`;
+  3. reads its language out of the zip, without unpacking it: each resource pack's `texts/en_US.lang`. One that the
+     pack's `contents.json` lists and the zip lacks is read from the release's other zip, refused where that has none
+     (1.16.220.02's Linux zip has no `texts` in its chemistry pack; its Windows zip has);
   4. unpacks its server, starts it on a new flat world, joins it with a client (what the server sends a client: the
      item registry, the creative list and item_component; the biome definitions, the entity identifiers, the crafting
      recipes, the commands, and the player's attributes), has its console answer `help <command>` for each command sent

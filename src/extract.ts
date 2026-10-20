@@ -65,7 +65,8 @@ export function workDir(cache: string, build: string, platform: Platform): strin
 
 export async function readRelease(version: VersionJson, platform: Platform, cache: string, blocks: ReadBlocks = readBlocks, signal?: AbortSignal): Promise<Release> {
   const zip = await trackedZip(version, platform, cache)
-  const language = await readLanguage(zip)
+  const other = PLATFORMS.find((p) => p !== platform && version.binary[p])
+  const language = await readLanguage(zip, other ? () => trackedZip(version, other, cache) : undefined)
   checkLanguage(language)
   const read = await blocks(zip, version.build, platform, workDir(cache, version.build, platform), signal)
   return { language, blocks: asOnWindows(read, version.build, platform) }
