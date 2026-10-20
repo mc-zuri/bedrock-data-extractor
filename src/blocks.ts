@@ -301,13 +301,17 @@ function ntfsOrder(a: string, b: string): number {
   return upper(a) < upper(b) ? -1 : upper(a) > upper(b) ? 1 : 0
 }
 
+function numbersPackItemsOtherwise(build: string, platform: Platform): boolean {
+  return platform === 'linux' && compareVersions(build, PACK_ITEMS_BY_NAME_FROM) < 0
+}
+
 /**
  * The items a Linux server gives, as the release's Windows server gives them. Both servers number the items a pack
  * defines (packItems) on the same ids, the Windows server in the order its NTFS folder lists their files, the Linux
  * server before 1.26.40 in an order of its own (from 1.21.42 the same on every machine, before it its ext4 folder's).
  */
 export function itemsAsOnWindows(items: Items, packItems: PackItem[], build: string, platform: Platform): Items {
-  if (platform !== 'linux' || compareVersions(build, PACK_ITEMS_BY_NAME_FROM) >= 0) {
+  if (!numbersPackItemsOtherwise(build, platform)) {
     return items
   }
 
@@ -657,7 +661,7 @@ export function withSent(items: Items, sent: Sent, stateOf: (block: number, what
 }
 
 /** The agent's files in `out`, with what the behavior packs in `serverDir` define, what the server sent and its console's help; checked. */
-export function readAgentOutput(out: string, serverDir: string, sent: Sent, help: Record<string, string[]>): Blocks {
+export function readAgentOutput(out: string, serverDir: string, sent: Sent, help: Record<string, string[]>): Omit<Blocks, 'packItems'> {
   const palette = readFileSync(join(out, PALETTE_FILE))
   const states = parsePalette(palette)
   const shapes = parseShapes(readFileSync(join(out, 'block_shapes.nbt')))
@@ -675,7 +679,6 @@ export function readAgentOutput(out: string, serverDir: string, sent: Sent, help
   const entities = entitiesOf(sent, readEntities(serverDir))
   const commands = commandsOf(sent, help)
   const attributes = { attributes: sent.attributes }
-  const packItems = readPackItems(serverDir)
   checkPalette(states)
   checkShapes(shapes, states)
   checkItems(items)
@@ -689,7 +692,7 @@ export function readAgentOutput(out: string, serverDir: string, sent: Sent, help
   checkEntities(entities)
   checkCommands(commands)
   checkAttributes(attributes)
-  return { palette, states, shapes, blocks, items, enchantments, biomes, effects, enums, tints, recipes, entities, commands, attributes, packItems }
+  return { palette, states, shapes, blocks, items, enchantments, biomes, effects, enums, tints, recipes, entities, commands, attributes }
 }
 
 export async function readBlocks(zip: string, build: string, platform: Platform, work: string, signal?: AbortSignal): Promise<Blocks> {
@@ -699,5 +702,7 @@ export async function readBlocks(zip: string, build: string, platform: Platform,
   signal?.throwIfAborted()
   await unpackServer(zip, server, host)
   const { sent, help } = await runAgent(server, build, host, out, signal)
-  return readAgentOutput(out, server, sent, help)
+  // only where itemsAsOnWindows needs them: 1.26.52 keeps some item files only in a binary form (`\x7fMCB`), not JSON
+  const packItems = numbersPackItemsOtherwise(build, platform) ? readPackItems(server) : []
+  return { ...readAgentOutput(out, server, sent, help), packItems }
 }
