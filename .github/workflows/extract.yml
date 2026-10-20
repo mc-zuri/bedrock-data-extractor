@@ -66,9 +66,9 @@ jobs:
             echo 'bedrock-data already says this'
             exit 0
           fi
-          builds=$(git diff --cached --name-only | grep -oE '^release/[^/]+' | sort -u | paste -sd ' ' -)
+          releases=$(git diff --cached --name-only | grep -oE '^release/[^/]+' | sort -u | wc -l)
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -q -m "${builds:-versions.json}" -m "Extracted by https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          git commit -q -m 'Extract releases' -m "Releases changed: ${releases}. Extracted by https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
           git pull -q --rebase
           git push -q
