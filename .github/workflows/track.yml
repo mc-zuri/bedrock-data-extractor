@@ -1,6 +1,6 @@
 # What minecraft.net offers, into versions/: every 6 hours, each build that is new (both channels) has its zips hashed,
-# and the result is committed to main. Each new release is then handed to the support workflow, which tries to export
-# it. Run by hand with builds (1.21.42.01 1.26.52.3) to track those instead, again with force.
+# and the result is committed to main. Each new build, release or preview, is then handed to the support workflow,
+# which tries to export it. Run by hand with builds (1.21.42.01 1.26.52.3) to track those instead, again with force.
 name: track
 
 on:
@@ -61,20 +61,20 @@ jobs:
             exit 0
           fi
           tracked=$(git diff --cached --name-only -- versions | grep -oE '(release|preview)/[0-9.]+[0-9]' | sort -u | paste -sd ' ' -)
-          releases=$(git diff --cached --name-only --diff-filter=A -- versions/release | grep -oE '[0-9]+(\.[0-9]+){3}' | paste -sd ' ' -)
+          added=$(git diff --cached --name-only --diff-filter=A -- versions/release versions/preview | grep -oE '(release|preview)/[0-9.]+[0-9]' | paste -sd ' ' -)
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -q -m "track ${tracked:-versions.json}"
           git pull -q --rebase
           git push -q
-          echo "releases=$releases" >> "$GITHUB_OUTPUT"
-      - name: Try to support each new release
-        if: steps.commit.outputs.releases != ''
+          echo "added=$added" >> "$GITHUB_OUTPUT"
+      - name: Try to support each new build
+        if: steps.commit.outputs.added != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASES: ${{ steps.commit.outputs.releases }}
+          ADDED: ${{ steps.commit.outputs.added }}
         run: |
-          for build in $RELEASES; do
-            gh workflow run support.yml --ref main -f build="$build"
-            echo "support $build: started"
+          for target in $ADDED; do
+            gh workflow run support.yml --ref main -f channel="${target%%/*}" -f build="${target#*/}"
+            echo "support $target: started"
           done

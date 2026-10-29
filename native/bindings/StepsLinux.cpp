@@ -353,4 +353,12 @@ BDG_BINDINGS("1.26.51.1") {
     r.function(n::LevelTick, "55 41 57 41 56 53 48 83 EC 58 49 89 FE 0F B6 05 ? ? ? ?");
 }
 
+// previews (core/Version.h): a release of 1.26.70 comes out after them and runs this too
+BDG_BINDINGS("1.26.70.20") {
+    // Item has a virtual fewer, before slot 15
+    r.slot(n::ItemGetMaxDamage, 36);
+    r.slot(n::ItemGetMaxStackSize, 100);
+    r.slot(n::ItemBuildDescriptionName, 92);
+}
+
 // clang-format on

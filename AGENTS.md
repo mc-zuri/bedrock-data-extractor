@@ -16,10 +16,10 @@ writes.
 - **A run changes files only where the game says otherwise.** No timestamps, no extractor version, no
   machine-dependent bytes (gzip is rewritten only where its decompressed text changed). `pnpm track` with nothing new,
   or `pnpm extract` with nothing unexported, must leave both repos' `git status` clean.
-- **Only supported zips are exported, and an export is never repeated unasked.** `pnpm extract` reads a release from
-  a platform it is supported on, and skips a release bedrock-data has every kind of; `--force` exports it again.
+- **Only supported zips are exported, and an export is never repeated unasked.** `pnpm extract` reads a build from a
+  platform it is supported on, and skips a build bedrock-data has every kind of; `--force` exports it again.
 - **A platform's server runs on its own OS, and its answers are its own.** The blocks are read from the running
-  server: a release is exported from its first supported platform (linux's where both are), never from the other
+  server: a build is exported from its first supported platform (linux's where both are), never from the other
   platform where this machine cannot run it. Where the platforms disagree, bedrock-data says which one a file came
   from, and its README says where they differ.
 - **Exact builds only.** A build is what its zip is named (`1.21.42.01`, never `1.21.42.1`); a zip that is not at its
@@ -28,7 +28,11 @@ writes.
 - **Schemas and checks first.** `versions/` is checked against `schemas/` here; bedrock-data's files against
   `BEDROCK_DATA_DIR/schemas/` (the tests copy them from there), and extracted data against `src/checks.ts`. A new field
   or file changes its schema, and for bedrock-data its README, together with the code that writes it.
-- **Previews are tracked, never supported.**
+- **A preview goes the way a release does**, into bedrock-data's `preview/<build>/`. Where bedrock-protocol knows no
+  version of a server's protocol (every preview's), the client decodes as the newest version it knows before that
+  protocol, changed by what each protocol since changed in what a server sends (`src/protocol.ts`, from Mojang's
+  protocol docs), and joins as the server's; a packet the export reads that does not decode to its last byte fails
+  support.
 - **The agent binds, it never guesses.** Each build's bindings are steps in `native/bindings/`; a pattern must match
   once, a slot and an offset are checked by what the game answers (`src/checks.ts`). What the agent finds itself is
   found only where one place fits what known blocks and items read or answer, and is checked the same; a function is

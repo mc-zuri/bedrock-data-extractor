@@ -1,17 +1,17 @@
-# Each supported release into bedrock-data, on a push to main that changes what is supported (a merged support pull
-# request) or how it is exported. Releases are read from their Linux zip (a release supported only on Windows is
-# exported locally). A release bedrock-data has the data of is left as it is; run by hand with builds and
+# Each supported build (release or preview) into bedrock-data, on a push to main that changes what is supported (a
+# merged support pull request) or how it is exported. Builds are read from their Linux zip (a build supported only on
+# Windows is exported locally). A build bedrock-data has the data of is left as it is; run by hand with builds and
 # force to export those again. The commit goes straight to bedrock-data's main.
 name: extract
 
 on:
   push:
     branches: [main]
-    paths: ['versions/release/**', 'src/**', 'native/**', 'package.json', 'pnpm-lock.yaml']
+    paths: ['versions/release/**', 'versions/preview/**', 'src/**', 'native/**', 'package.json', 'pnpm-lock.yaml']
   workflow_dispatch:
     inputs:
       builds:
-        description: 'Releases to export, as their zips name them (space-separated); empty: each supported one bedrock-data lacks'
+        description: 'Builds to export, as their zips name them (space-separated); empty: each supported one bedrock-data lacks'
         required: false
         default: ''
       force:
@@ -66,9 +66,9 @@ jobs:
             echo 'bedrock-data already says this'
             exit 0
           fi
-          releases=$(git diff --cached --name-only | grep -oE '^release/[^/]+' | sort -u | wc -l)
+          builds=$(git diff --cached --name-only | grep -oE '^(release|preview)/[^/]+' | sort -u | wc -l)
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -q -m 'Extract releases' -m "Releases changed: ${releases}. Extracted by https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          git commit -q -m 'Extract builds' -m "Builds changed: ${builds}. Extracted by https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
           git pull -q --rebase
           git push -q

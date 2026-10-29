@@ -3,18 +3,18 @@ import { readBlocks } from './blocks.ts'
 import { cacheDir, readRelease, type ReadBlocks } from './extract.ts'
 import { errorMessage } from './util.ts'
 import type { VersionStore } from './versionStore.ts'
-import { PLATFORMS, type Platform } from './versions.ts'
+import { PLATFORMS, targetName, trackCommand, type Platform, type Target } from './versions.ts'
 
 export interface Support {
   supported: Platform[]
   failed: { platform: Platform; error: string }[]
 }
 
-export async function support(store: VersionStore, build: string, platforms: readonly Platform[], cache: string, blocks: ReadBlocks = readBlocks): Promise<Support> {
-  const version = store.read('release', build)
+export async function support(store: VersionStore, t: Target, platforms: readonly Platform[], cache: string, blocks: ReadBlocks = readBlocks): Promise<Support> {
+  const version = store.read(t.channel, t.build)
 
   if (!version) {
-    throw new Error(`release ${build} is not tracked: pnpm track ${build}`)
+    throw new Error(`${targetName(t)} is not tracked: ${trackCommand(t)}`)
   }
 
   const result: Support = { supported: [], failed: [] }
@@ -29,7 +29,7 @@ export async function support(store: VersionStore, build: string, platforms: rea
   }
 
   if (!result.failed.length) {
-    rmSync(cacheDir(cache, build), { recursive: true, force: true })
+    rmSync(cacheDir(cache, t), { recursive: true, force: true })
   }
 
   const marks: Partial<Record<Platform, boolean>> = {}
@@ -42,6 +42,6 @@ export async function support(store: VersionStore, build: string, platforms: rea
     marks[platform] = false
   }
 
-  store.setSupported(build, marks)
+  store.setSupported(t, marks)
   return result
 }

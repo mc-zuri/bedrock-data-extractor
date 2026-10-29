@@ -159,7 +159,7 @@ std::optional<ToolRequirement> toolRequirement(Known const& known) {
         }
     }
     std::int64_t const bound = bindings::current().offset(n::BlockTypeRequiresCorrectTool);
-    log::info("block facts: requires-correct-tool bit {} by the binding, {} bits fit", bound, bits.size());
+    log::info("block facts: requires-correct-tool bit {} by the binding, {} bits fit{}", bound, bits.size(), bits.size() == 1 ? std::format(" (bit {})", bits[0]) : "");
     if (bound >= 0) {
         return std::ranges::count(bits, bound) ? std::optional{ToolRequirement{bound}} : std::nullopt;
     }

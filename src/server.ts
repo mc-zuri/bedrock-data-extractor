@@ -136,6 +136,8 @@ export async function start(dir: string, host: Host, env: Record<string, string>
 
   const child = spawn(join(dir, host.serverExe), [], { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...host.serverEnv, ...env } })
   child.stdin.on('error', () => {})
+  // decoded as one stream: a character split between two reads (the console's § colours) stays whole
+  child.stdout.setEncoding('utf8')
   child.stderr.resume()
   const exited = new Promise<number | null>((resolve) => child.once('exit', resolve))
   void exited.then(() => {
@@ -194,8 +196,8 @@ export async function start(dir: string, host: Host, env: Record<string, string>
       function exit(code: number | null): void {
         settle(new Error(`exited with code ${code} while answering ${line}`))
       }
-      function listen(data: Buffer): void {
-        said += data.toString()
+      function listen(data: string): void {
+        said += data
         clearTimeout(quiet)
 
         if (ended(said)) {
@@ -229,8 +231,8 @@ function untilOutput(child: ChildProcessByStdio<Writable, Readable, Readable>, t
         resolve(text)
       }
     }
-    function listen(data: Buffer): void {
-      tail = (tail + data.toString()).slice(-4096)
+    function listen(data: string): void {
+      tail = (tail + data).slice(-4096)
       const text = texts.find((t) => tail.includes(t))
 
       if (text !== undefined) {

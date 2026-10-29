@@ -7,9 +7,11 @@ import { checkSteve } from '../src/checks.ts'
 import { DataRepo } from '../src/dataRepo.ts'
 import { extract } from '../src/extract.ts'
 import { importedSkin, normalizedSkin, type Skin } from '../src/steve.ts'
+import type { Target } from '../src/versions.ts'
 import { cachedRelease, emptyDataRepo, fakeBlocks, tempDir, VANILLA } from './helpers.ts'
 
 const BUILD = '1.26.52.3'
+const RELEASE: Target = { channel: 'release', build: BUILD }
 
 function base64(text: string): string {
   return Buffer.from(text, 'utf8').toString('base64')
@@ -61,15 +63,15 @@ void test("a release's steve goes into bedrock-data with its entry in build.json
   const { store, cache } = cachedRelease(BUILD, { linux: VANILLA }, ['linux'])
   const repo = new DataRepo(emptyDataRepo())
   const skin = normalizedSkin(login())
-  assert.throws(() => repo.writeSteve(BUILD, skin), /pnpm extract 1\.26\.52\.3 first/)
-  await extract(repo, store, BUILD, false, cache, fakeBlocks())
-  assert.ok(repo.writeSteve(BUILD, skin))
-  assert.ok(!repo.writeSteve(BUILD, skin), 'the same skin again changes nothing')
-  assert.deepEqual(JSON.parse(gunzipSync(readFileSync(join(repo.buildDir(BUILD), 'steve.json.gz'))).toString('utf8')), skin)
+  assert.throws(() => repo.writeSteve(RELEASE, skin), /pnpm extract 1\.26\.52\.3 first/)
+  await extract(repo, store, RELEASE, false, cache, fakeBlocks())
+  assert.ok(repo.writeSteve(RELEASE, skin))
+  assert.ok(!repo.writeSteve(RELEASE, skin), 'the same skin again changes nothing')
+  assert.deepEqual(JSON.parse(gunzipSync(readFileSync(join(repo.buildDir(RELEASE), 'steve.json.gz'))).toString('utf8')), skin)
   const again = cachedRelease(BUILD, { linux: VANILLA }, ['linux'])
-  await extract(repo, again.store, BUILD, true, again.cache, fakeBlocks())
-  assert.deepEqual(repo.readBuild(BUILD)?.data.steve, { file: 'steve.json.gz' })
-  assert.equal(Object.keys(repo.readBuild(BUILD)?.data ?? {}).at(-1), 'steve')
+  await extract(repo, again.store, RELEASE, true, again.cache, fakeBlocks())
+  assert.deepEqual(repo.readBuild(RELEASE)?.data.steve, { file: 'steve.json.gz' })
+  assert.equal(Object.keys(repo.readBuild(RELEASE)?.data ?? {}).at(-1), 'steve')
 })
 
 void test('an earlier capture is imported from <dir>/<build>/steve.json, normalized', () => {

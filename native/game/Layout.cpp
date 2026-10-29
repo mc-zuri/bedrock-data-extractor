@@ -135,9 +135,9 @@ std::int64_t byteAt(Finder const& f, std::initializer_list<std::pair<char const*
         why, what);
 }
 
-// the targets of the `jmp rel32`s in the first bytes of a deleting destructor (slot 1): one is its tail call, after it
-// has destroyed the object, to operator delete
-std::vector<std::uintptr_t> jumpsOfDestructor(std::uintptr_t vtable) {
+// the targets of the `call rel32`s and `jmp rel32`s in the first bytes of a deleting destructor (slot 1): one is operator
+// delete, once it has destroyed the object (a tail call, or from 1.26.60.25 a call where it has an exception path)
+std::vector<std::uintptr_t> targetsOfDestructor(std::uintptr_t vtable) {
     std::vector<std::uintptr_t> out;
     std::uintptr_t const        fn = readPtr(vtable, 8);
     std::uint8_t                code[96];
@@ -145,7 +145,7 @@ std::vector<std::uintptr_t> jumpsOfDestructor(std::uintptr_t vtable) {
         return out;
     }
     for (std::size_t i = 0; i + 5 <= sizeof code; ++i) {
-        if (code[i] == 0xE9) {
+        if (code[i] == 0xE8 || code[i] == 0xE9) {
             std::int32_t rel;
             std::memcpy(&rel, code + i + 1, 4);
             if (std::uintptr_t const target = fn + i + 5 + static_cast<std::intptr_t>(rel); memory::inImage(target)) {
@@ -156,11 +156,11 @@ std::vector<std::uintptr_t> jumpsOfDestructor(std::uintptr_t vtable) {
     return out;
 }
 
-// the one target CompoundTag's and Item's deleting destructors both jump to
+// the one target CompoundTag's and Item's deleting destructors both call or jump to
 std::uintptr_t operatorDelete(std::uintptr_t tagVtable, std::uintptr_t itemVtable) {
     std::vector<std::uintptr_t> common;
-    for (std::uintptr_t a : jumpsOfDestructor(tagVtable)) {
-        for (std::uintptr_t b : jumpsOfDestructor(itemVtable)) {
+    for (std::uintptr_t a : targetsOfDestructor(tagVtable)) {
+        for (std::uintptr_t b : targetsOfDestructor(itemVtable)) {
             if (a == b && std::ranges::find(common, a) == common.end()) {
                 common.push_back(a);
             }
@@ -229,7 +229,7 @@ std::string findLayout(World const& world) {
     if (!r.has(n::OperatorDelete)) {
         std::uintptr_t const found = operatorDelete(tagVtable, itemVtable);
         if (!found) {
-            return "operator delete: CompoundTag's and Item's deleting destructors do not jump to one function";
+            return "operator delete: CompoundTag's and Item's deleting destructors do not call or jump to one function";
         }
         r.foundFunction(n::OperatorDelete, found);
         log::info("layout: operator delete at rva 0x{:X}", found - memory::imageBase());

@@ -78,13 +78,14 @@ Result exportBlocks(Context const& context) {
     if (!facts.error.empty()) {
         return {false, "block facts: " + facts.error};
     }
-    auto const dig = game::dig(context.items, context.blockTypes);
-    if (!dig.error.empty()) {
-        return {false, "dig: " + dig.error};
-    }
+    // drops first: dig asks with stacks of one, which carry the vtable of the stacks the drop code returns
     auto const drops = game::drops(context.world, context.items, context.blockTypes);
     if (!drops.error.empty()) {
         return {false, "drops: " + drops.error, drops.notLoaded};
+    }
+    auto const dig = game::dig(context.items, context.blockTypes);
+    if (!dig.error.empty()) {
+        return {false, "dig: " + dig.error};
     }
     Buffer out;
     out.header(Compound, "");

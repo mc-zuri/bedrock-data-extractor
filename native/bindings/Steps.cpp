@@ -475,4 +475,30 @@ BDG_BINDINGS("1.26.51.1") {
     r.function(n::LevelTick, "55 56 57 53 48 81 EC B8 00 00 00 48 8D AC 24 80 00 00 00 48 C7 45 30 FE FF FF FF 48 89 CF");
 }
 
+// previews (core/Version.h): a release of 1.26.60 comes out after them and runs these too
+BDG_BINDINGS("1.26.60.21") {
+    r.function(n::LevelTick, "55 41 57 41 56 56 57 53 48 81 EC B8 00 00 00 48 8D AC 24 80 00 00 00 48 C7 45 30 FE FF FF FF 48 89 CF 8B 05 ? ? ? ? 8B 0D ? ? ? ? 65 48 8B 14 25 58 00 00 00 48 8B 0C CA 3B 81 04 00 00 00 0F 8F ? ? ? ? 48 8D 0D ? ? ? ? 48 89 4D 10 C6 45 18 00 48 8D 75 20 48 C7 45 28 00 00 00 00 C6 45 08 00 48 8D 5D D0 48 89 F2 49 89 D8 E8 ? ? ? ? 88 45 18 48 8B 07 48 8B 80 ? ? 00 00 48 89 F9 FF 15 ? ? ? ? 48 8D 0D ? ? ? ? 48 89 4D D0 48 89 7D D8");
+}
+
+BDG_BINDINGS("1.26.60.25") {
+    r.function(n::LevelTick, "55 41 57 41 56 56 57 53 48 81 EC B8 00 00 00 48 8D AC 24 80 00 00 00 48 C7 45 30 FE FF FF FF 48 89 CF 8B 05 ? ? ? ? 8B 0D ? ? ? ? 65 48 8B 14 25 58 00 00 00 48 8B 0C CA 3B 81 04 00 00 00 0F 8F ? ? ? ? 48 8D 0D ? ? ? ? 48 89 4D 10 C6 45 18 00 48 8D 75 20 48 C7 45 28 00 00 00 00 C6 45 08 00 48 8D 5D D0 48 89 F2 49 89 D8 E8 ? ? ? ? 88 45 18 48 8B 07 48 8B 80 ? ? 00 00 48 89 F9 FF 15 ? ? ? ? 90 48 8D 0D ? ? ? ? 48 89 4D D0 48 89 7D D8");  // a nop after each call
+}
+
+BDG_BINDINGS("1.26.60.28") {
+    r.offset(n::LevelBlockTypeRegistry, 448);  // the Level's members from +0x1B0 on are a qword further
+}
+
+BDG_BINDINGS("1.26.60.6") {
+    r.function(n::LevelTick, "55 56 57 53 48 81 EC B8 00 00 00 48 8D AC 24 80 00 00 00 48 C7 45 30 FE FF FF FF 48 89 CF 8B 05 ? ? ? ? 8B 0D ? ? ? ? 65 48 8B 14 25 58 00 00 00 48 8B 0C CA 3B 81 04 00 00 00 0F 8F ? ? ? ? 48 8D 0D ? ? ? ? 48 89 4D 10 C6 45 18 00 48 8D 75 20 48 C7 45 28 00 00 00 00 C6 45 08 00 48 8D 5D D0 48 89 F2 49 89 D8 E8 ? ? ? ? 88 45 18 48 8B 07 48 8B 80 ? ? 00 00 48 89 F9 FF 15 ? ? ? ? 90 48 8D 0D ? ? ? ? 48 89 4D D0 48 89 7D D8");  // r15 and r14 no longer saved
+}
+
+BDG_BINDINGS("1.26.70.20") {
+    r.function(n::LevelTick, "55 41 57 41 56 56 57 53 48 81 EC B8 00 00 00 48 8D AC 24 80 00 00 00 48 C7 45 30 FE FF FF FF 48 89 CF 8B 05 ? ? ? ? 8B 0D ? ? ? ? 65 48 8B 14 25 58 00 00 00 48 8B 0C CA 3B 81 04 00 00 00 0F 8F ? ? ? ? 48 8D 0D ? ? ? ? 48 89 4D 10 C6 45 18 00 48 8D 75 20 48 C7 45 28 00 00 00 00 C6 45 08 00 48 8D 5D D0 48 89 F2 49 89 D8 E8 ? ? ? ? 88 45 18 48 8B 07 48 8B 80 ? ? 00 00 48 89 F9 FF 15 ? ? ? ? 90 48 8D 0D ? ? ? ? 48 89 4D D0 48 89 7D D8");  // 1.26.60.25's: r15 and r14 saved
+    // Item has a virtual fewer, before slot 15
+    r.slot(n::ItemGetMaxDamage, 35);
+    r.slot(n::ItemGetMaxStackSize, 99);
+    r.slot(n::ItemBuildDescriptionName, 91);
+    r.drop(n::BlockTypeRequiresCorrectTool);  // one bit fits
+}
+
 // clang-format on

@@ -5,14 +5,14 @@ import type { Release } from './extract.ts'
 import { STEVE_FILE, type Skin } from './steve.ts'
 import { keepGzipped, keepJson, Schemas } from './files.ts'
 import { LANGUAGE_FILE, type Language } from './language.ts'
-import { compareVersions, isBuild, type Platform } from './versions.ts'
+import { CHANNELS, compareVersions, isBuild, targetName, type Channel, type Platform, type Target } from './versions.ts'
 
 const FORMAT_VERSION = 1
 
 export interface BuildJson {
   build: string
   version: string
-  channel: 'release'
+  channel: Channel
   binary: Partial<Record<Platform, { url: string; sha256: string; size: number }>>
   data: {
     language?: { file: typeof LANGUAGE_FILE; from: Platform }
@@ -50,17 +50,17 @@ export class DataRepo {
     this.schemas = new Schemas(join(root, 'schemas'))
   }
 
-  buildDir(build: string): string {
-    return join(this.root, 'release', build)
+  buildDir(t: Target): string {
+    return join(this.root, t.channel, t.build)
   }
 
-  readBuild(build: string): BuildJson | undefined {
-    const file = join(this.buildDir(build), 'build.json')
+  readBuild(t: Target): BuildJson | undefined {
+    const file = join(this.buildDir(t), 'build.json')
     return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as BuildJson) : undefined
   }
 
-  builds(): string[] {
-    const dir = join(this.root, 'release')
+  builds(channel: Channel): string[] {
+    const dir = join(this.root, channel)
 
     if (!existsSync(dir)) {
       return []
@@ -72,78 +72,83 @@ export class DataRepo {
   }
 
   writeBuild(json: BuildJson): boolean {
-    this.schemas.check('build', json, `release/${json.build}/build.json`)
-    return keepJson(join(this.buildDir(json.build), 'build.json'), json)
+    this.schemas.check('build', json, `${targetName(json)}/build.json`)
+    return keepJson(join(this.buildDir(json), 'build.json'), json)
   }
 
-  writeLanguage(build: string, language: Language): boolean {
-    this.schemas.check('language', language, `release/${build}/${LANGUAGE_FILE}`)
-    return keepGzipped(join(this.buildDir(build), LANGUAGE_FILE), `${JSON.stringify(language)}\n`)
+  writeLanguage(t: Target, language: Language): boolean {
+    this.schemas.check('language', language, `${targetName(t)}/${LANGUAGE_FILE}`)
+    return keepGzipped(join(this.buildDir(t), LANGUAGE_FILE), `${JSON.stringify(language)}\n`)
   }
 
-  writePalette(build: string, palette: Buffer): boolean {
-    return keepGzipped(join(this.buildDir(build), PALETTE_FILE), palette)
+  writePalette(t: Target, palette: Buffer): boolean {
+    return keepGzipped(join(this.buildDir(t), PALETTE_FILE), palette)
   }
 
-  writeShapes(build: string, shapes: BlockShapes): boolean {
-    this.schemas.check('block_shapes', shapes, `release/${build}/${SHAPES_FILE}`)
+  writeShapes(t: Target, shapes: BlockShapes): boolean {
+    this.schemas.check('block_shapes', shapes, `${targetName(t)}/${SHAPES_FILE}`)
     return keepGzipped(
-      join(this.buildDir(build), SHAPES_FILE),
+      join(this.buildDir(t), SHAPES_FILE),
       `${JSON.stringify(shapes)}
 `,
     )
   }
 
-  writeBlocks(build: string, blocks: BlockTypes): boolean {
-    this.schemas.check('blocks', blocks, `release/${build}/${BLOCKS_FILE}`)
+  writeBlocks(t: Target, blocks: BlockTypes): boolean {
+    this.schemas.check('blocks', blocks, `${targetName(t)}/${BLOCKS_FILE}`)
     return keepGzipped(
-      join(this.buildDir(build), BLOCKS_FILE),
+      join(this.buildDir(t), BLOCKS_FILE),
       `${JSON.stringify(blocks)}
 `,
     )
   }
 
-  writeItems(build: string, items: Items): boolean {
-    this.schemas.check('items', items, `release/${build}/${ITEMS_FILE}`)
+  writeItems(t: Target, items: Items): boolean {
+    this.schemas.check('items', items, `${targetName(t)}/${ITEMS_FILE}`)
     return keepGzipped(
-      join(this.buildDir(build), ITEMS_FILE),
+      join(this.buildDir(t), ITEMS_FILE),
       `${JSON.stringify(items)}
 `,
     )
   }
 
-  writeEnchantments(build: string, enchantments: Enchantments): boolean {
-    this.schemas.check('enchantments', enchantments, `release/${build}/${ENCHANTMENTS_FILE}`)
-    return keepGzipped(join(this.buildDir(build), ENCHANTMENTS_FILE), `${JSON.stringify(enchantments)}\n`)
+  writeEnchantments(t: Target, enchantments: Enchantments): boolean {
+    this.schemas.check('enchantments', enchantments, `${targetName(t)}/${ENCHANTMENTS_FILE}`)
+    return keepGzipped(join(this.buildDir(t), ENCHANTMENTS_FILE), `${JSON.stringify(enchantments)}\n`)
   }
 
-  writeKind(build: string, kind: Kind, value: Release['blocks'][Kind]): boolean {
+  writeKind(t: Target, kind: Kind, value: Release['blocks'][Kind]): boolean {
     const { file, schema } = KINDS[kind]
-    this.schemas.check(schema, value, `release/${build}/${file}`)
-    return keepGzipped(join(this.buildDir(build), file), `${JSON.stringify(value)}\n`)
+    this.schemas.check(schema, value, `${targetName(t)}/${file}`)
+    return keepGzipped(join(this.buildDir(t), file), `${JSON.stringify(value)}\n`)
   }
 
-  /** The release's steve, and its entry in its build.json (which must be there: the release extracted first) */
-  writeSteve(build: string, skin: Skin): boolean {
-    const json = this.readBuild(build)
+  /** The build's steve, and its entry in its build.json (which must be there: the build extracted first) */
+  writeSteve(t: Target, skin: Skin): boolean {
+    const json = this.readBuild(t)
 
     if (!json) {
-      throw new Error(`release/${build} is not in bedrock-data: pnpm extract ${build} first`)
+      throw new Error(`${targetName(t)} is not in bedrock-data: pnpm extract ${t.build} first`)
     }
 
-    this.schemas.check('steve', skin, `release/${build}/${STEVE_FILE}`)
-    const wrote = keepGzipped(join(this.buildDir(build), STEVE_FILE), `${JSON.stringify(skin)}\n`)
+    this.schemas.check('steve', skin, `${targetName(t)}/${STEVE_FILE}`)
+    const wrote = keepGzipped(join(this.buildDir(t), STEVE_FILE), `${JSON.stringify(skin)}\n`)
     const { steve: _, ...data } = json.data
     return this.writeBuild({ ...json, data: { ...data, steve: { file: STEVE_FILE } } }) || wrote
   }
 
-  has(build: string, file: string): boolean {
-    return existsSync(join(this.buildDir(build), file))
+  has(t: Target, file: string): boolean {
+    return existsSync(join(this.buildDir(t), file))
   }
 
   writeVersions(): boolean {
-    const builds = this.builds()
-    const versions = { formatVersion: FORMAT_VERSION, release: builds.length ? { latest: builds[0], builds } : { builds } }
+    const versions: Record<string, unknown> = { formatVersion: FORMAT_VERSION }
+
+    for (const channel of CHANNELS) {
+      const builds = this.builds(channel)
+      versions[channel] = builds.length ? { latest: builds[0], builds } : { builds }
+    }
+
     this.schemas.check('versions', versions, 'versions.json')
     return keepJson(join(this.root, 'versions.json'), versions)
   }

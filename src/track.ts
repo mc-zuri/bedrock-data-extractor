@@ -1,23 +1,18 @@
 import { hashZip } from './download.ts'
 import type { VersionStore, VersionJson } from './versionStore.ts'
-import { PLATFORMS, versionOf, zipUrl, type Channel, type Platform } from './versions.ts'
+import { PLATFORMS, versionOf, zipUrl, type Platform, type Target } from './versions.ts'
 
-export interface Target {
-  channel: Channel
-  build: string
+/** A build to track, and the platforms the download links offer it for */
+export interface Offer extends Target {
   platforms?: Platform[]
 }
 
-export function targetName(t: Target): string {
-  return `${t.channel}/${t.build}`
-}
-
-export function isTracked(store: VersionStore, t: Target): boolean {
+export function isTracked(store: VersionStore, t: Offer): boolean {
   const json = store.read(t.channel, t.build)
   return json !== undefined && Object.keys(json.binary).length > 0 && !t.platforms?.some((p) => !json.binary[p])
 }
 
-export async function track(store: VersionStore, t: Target, force: boolean): Promise<string | undefined> {
+export async function track(store: VersionStore, t: Offer, force: boolean): Promise<string | undefined> {
   if (!force && isTracked(store, t)) {
     return undefined
   }

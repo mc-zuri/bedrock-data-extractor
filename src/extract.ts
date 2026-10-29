@@ -6,9 +6,9 @@ import { KINDS, type BuildJson, type DataRepo, type Kind } from './dataRepo.ts'
 import { download } from './download.ts'
 import { LANGUAGE_FILE, readLanguage, type Language } from './language.ts'
 import type { VersionJson, VersionStore } from './versionStore.ts'
-import { PLATFORMS, type Platform } from './versions.ts'
+import { PLATFORMS, targetName, trackCommand, type Platform, type Target } from './versions.ts'
 
-export type ReadBlocks = (zip: string, build: string, platform: Platform, work: string, signal?: AbortSignal) => Promise<Blocks>
+export type ReadBlocks = (zip: string, t: Target, platform: Platform, work: string, signal?: AbortSignal) => Promise<Blocks>
 
 export interface Release {
   language: Language
@@ -19,8 +19,8 @@ export function exportPlatform(version: VersionJson): Platform | undefined {
   return PLATFORMS.find((p) => version.binary[p]?.supported)
 }
 
-export function isExtracted(repo: DataRepo, build: string): boolean {
-  const data = repo.readBuild(build)?.data
+export function isExtracted(repo: DataRepo, t: Target): boolean {
+  const data = repo.readBuild(t)?.data
   const kinds = [
     data?.language,
     data?.blockPalette,
@@ -30,21 +30,21 @@ export function isExtracted(repo: DataRepo, build: string): boolean {
     data?.enchantments,
     ...(Object.keys(KINDS) as Kind[]).map((kind) => data?.[kind]),
   ]
-  return kinds.every((kind) => kind && repo.has(build, kind.file))
+  return kinds.every((kind) => kind && repo.has(t, kind.file))
 }
 
-export function cacheDir(cache: string, build: string): string {
-  return join(cache, 'release', build)
+export function cacheDir(cache: string, t: Target): string {
+  return join(cache, t.channel, t.build)
 }
 
 export async function trackedZip(version: VersionJson, platform: Platform, cache: string): Promise<string> {
   const tracked = version.binary[platform]
 
   if (!tracked) {
-    throw new Error(`release ${version.build} has no ${platform} zip`)
+    throw new Error(`${targetName(version)} has no ${platform} zip`)
   }
 
-  const file = join(cacheDir(cache, version.build), `${platform}.zip`)
+  const file = join(cacheDir(cache, version), `${platform}.zip`)
   const zip = await download(tracked.url, file)
 
   if (!zip) {
@@ -53,14 +53,14 @@ export async function trackedZip(version: VersionJson, platform: Platform, cache
 
   if (zip.sha256 !== tracked.sha256) {
     rmSync(file, { force: true })
-    throw new Error(`${tracked.url} is not the zip tracked: sha256 ${zip.sha256}, not ${tracked.sha256} (pnpm track ${version.build} --force, if minecraft.net changed it)`)
+    throw new Error(`${tracked.url} is not the zip tracked: sha256 ${zip.sha256}, not ${tracked.sha256} (${trackCommand(version)} --force, if minecraft.net changed it)`)
   }
 
   return zip.file
 }
 
-export function workDir(cache: string, build: string, platform: Platform): string {
-  return join(cacheDir(cache, build), platform)
+export function workDir(cache: string, t: Target, platform: Platform): string {
+  return join(cacheDir(cache, t), platform)
 }
 
 export async function readRelease(version: VersionJson, platform: Platform, cache: string, blocks: ReadBlocks = readBlocks, signal?: AbortSignal): Promise<Release> {
@@ -68,65 +68,65 @@ export async function readRelease(version: VersionJson, platform: Platform, cach
   const other = PLATFORMS.find((p) => p !== platform && version.binary[p])
   const language = await readLanguage(zip, other ? () => trackedZip(version, other, cache) : undefined)
   checkLanguage(language)
-  const read = await blocks(zip, version.build, platform, workDir(cache, version.build, platform), signal)
+  const read = await blocks(zip, version, platform, workDir(cache, version, platform), signal)
   return { language, blocks: asOnWindows(read, version.build, platform) }
 }
 
 export async function extract(
   repo: DataRepo,
   store: VersionStore,
-  build: string,
+  t: Target,
   force: boolean,
   cache: string,
   blocks: ReadBlocks = readBlocks,
   signal?: AbortSignal,
 ): Promise<string | undefined> {
-  if (!force && isExtracted(repo, build)) {
+  if (!force && isExtracted(repo, t)) {
     return undefined
   }
 
-  const version = store.read('release', build)
+  const version = store.read(t.channel, t.build)
 
   if (!version) {
-    throw new Error(`release ${build} is not tracked: pnpm track ${build}`)
+    throw new Error(`${targetName(t)} is not tracked: ${trackCommand(t)}`)
   }
 
   const from = exportPlatform(version)
 
   if (!from) {
-    throw new Error(`release ${build} is supported on no platform: pnpm support ${build}`)
+    throw new Error(`${targetName(t)} is supported on no platform: pnpm support ${t.build}`)
   }
 
   const release = await readRelease(version, from, cache, blocks, signal)
   const changed: string[] = []
   const binary: BuildJson['binary'] = {}
 
-  if (repo.writeLanguage(build, release.language)) {
+  if (repo.writeLanguage(t, release.language)) {
     changed.push(LANGUAGE_FILE)
   }
 
-  if (repo.writePalette(build, release.blocks.palette)) {
+  if (repo.writePalette(t, release.blocks.palette)) {
     changed.push(PALETTE_FILE)
   }
 
-  if (repo.writeShapes(build, release.blocks.shapes)) {
+  if (repo.writeShapes(t, release.blocks.shapes)) {
     changed.push(SHAPES_FILE)
   }
 
-  if (repo.writeBlocks(build, release.blocks.blocks)) {
+  if (repo.writeBlocks(t, release.blocks.blocks)) {
     changed.push(BLOCKS_FILE)
   }
 
-  if (repo.writeItems(build, release.blocks.items)) {
+  if (repo.writeItems(t, release.blocks.items)) {
     changed.push(ITEMS_FILE)
   }
 
-  if (repo.writeEnchantments(build, release.blocks.enchantments)) {
+  if (repo.writeEnchantments(t, release.blocks.enchantments)) {
     changed.push(ENCHANTMENTS_FILE)
   }
 
   for (const kind of Object.keys(KINDS) as Kind[]) {
-    if (repo.writeKind(build, kind, release.blocks[kind])) {
+    if (repo.writeKind(t, kind, release.blocks[kind])) {
       changed.push(KINDS[kind].file)
     }
   }
@@ -140,11 +140,11 @@ export async function extract(
   }
 
   // a steve recorded before stays: extract does not record it
-  const steve = repo.readBuild(build)?.data.steve
+  const steve = repo.readBuild(t)?.data.steve
   const json: BuildJson = {
-    build,
+    build: t.build,
     version: version.version,
-    channel: 'release',
+    channel: t.channel,
     binary,
     data: {
       language: {
@@ -165,7 +165,7 @@ export async function extract(
     changed.unshift('build.json')
   }
 
-  rmSync(cacheDir(cache, build), { recursive: true, force: true })
+  rmSync(cacheDir(cache, t), { recursive: true, force: true })
   const strings = Object.keys(release.language.packs.vanilla).length
 
   return `${changed.length ? `${changed.join(', ')} written` : 'unchanged'} (from ${from}: ${strings} vanilla strings, ${release.blocks.states.length} block states)`

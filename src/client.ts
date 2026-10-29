@@ -1,9 +1,11 @@
 // A client in a running server's world: what the server sends one of the items (the item registry, the creative list,
 // the items' components), of the recipes, the biomes, the entities and the commands, and of its player's attributes;
 // and a player its console commands can run as. bedrock-protocol joins and decodes as the build's version where it
-// knows it, else as the newest it knows of the protocol the server advertises: a build joins once bedrock-protocol
-// knows a version of its protocol. It joins over the server's transport: RakNet on its port, or NetherNet, which finds
-// the server by its advertisement on the LAN.
+// knows it (a release's), else as the newest it knows of the protocol the server advertises; where it knows none (a
+// preview, a release newer than it), it decodes as the newest version it knows before that protocol, changed by each
+// protocol since as far as src/protocol.ts knows them, and joins as the protocol the server takes; each packet the
+// export reads must decode to its last byte. It joins over the server's
+// transport: RakNet on its port, or NetherNet, which finds the server by its advertisement on the LAN.
 import type { Client, ClientOptions } from 'bedrock-protocol'
 import { createRequire } from 'node:module'
 import {
@@ -19,7 +21,9 @@ import {
   type EntityIdentifier,
   type Recipe,
 } from './packets.ts'
+import { useProtocol } from './protocol.ts'
 import type { RunningServer } from './server.ts'
+import { targetName, type Target } from './versions.ts'
 
 const JOIN_TIMEOUT_MS = 120_000
 // a ping's own timeout, and how many go unanswered before the join fails
@@ -68,6 +72,8 @@ export interface Sent {
 // update_attributes, the first for its player); item_component where the server sends one before they are all in
 const KEPT = ['biome_definition_list', 'available_entity_identifiers', 'crafting_data', 'available_commands', 'update_attributes'] as const
 type Kept = (typeof KEPT)[number] | 'item_component'
+// every packet the export reads
+const READ: readonly string[] = ['start_game', 'item_registry', 'creative_content', 'item_component', ...KEPT]
 
 interface RawStack {
   network_id?: unknown
@@ -142,31 +148,81 @@ async function advertised(server: RunningServer): Promise<Advertised> {
   }
 }
 
-/** The options bedrock-protocol joins `build`'s server with: the build's version where known, else the newest known of the protocol the server advertises */
-async function joinOptions(build: string, server: RunningServer): Promise<ClientOptions> {
-  const releases = knownReleases()
-  const own = build.split('.').slice(0, 3).join('.')
-  const isKnown = releases.some((r) => r.minecraftVersion === own)
-  const ad = !isKnown || server.transport === 'nethernet' ? await advertised(server) : undefined
-  const version = isKnown ? own : releases.find((r) => r.version === ad?.protocol)?.minecraftVersion
+/** A release's own version, where bedrock-protocol knows it: a preview's protocol is not its release's */
+export function ownVersion(t: Target, releases: Release[]): string | undefined {
+  const own = t.build.split('.').slice(0, 3).join('.')
+  return t.channel === 'release' && releases.some((r) => r.minecraftVersion === own) ? own : undefined
+}
 
-  if (!version) {
-    throw new Error(`the client: bedrock-protocol knows no version of protocol ${ad?.protocol} (${build})`)
+/** The version bedrock-protocol decodes as; where the server's protocol is not the version's own, both protocols */
+export interface JoinAs {
+  version: string
+  protocol?: number
+  /** the version's own protocol */
+  from?: number
+}
+
+/** For a server of `protocol`: the newest version known of it, else the newest known before it, joining as `protocol` */
+export function joinAs(t: Target, protocol: number, releases: Release[]): JoinAs {
+  const same = releases.find((r) => r.version === protocol)
+
+  if (same) {
+    return { version: same.minecraftVersion }
   }
 
+  const before = releases.filter((r) => r.version < protocol).sort((a, b) => b.version - a.version)[0]
+
+  if (!before) {
+    throw new Error(`the client: bedrock-protocol knows no version of protocol ${protocol} or before (${targetName(t)})`)
+  }
+
+  return { version: before.minecraftVersion, protocol, from: before.version }
+}
+
+/** The options bedrock-protocol joins `t`'s server with; where it knows none of the server's protocol, both protocols */
+async function joinOptions(t: Target, server: RunningServer): Promise<{ options: ClientOptions; protocol?: number; from?: number }> {
+  const releases = knownReleases()
+  const own = ownVersion(t, releases)
+  const ad = !own || server.transport === 'nethernet' ? await advertised(server) : undefined
+  const { version, protocol, from } = own ? { version: own } : joinAs(t, (ad as Advertised).protocol, releases)
   const common = { host: '127.0.0.1', version: version as ClientOptions['version'], username: 'bdg', offline: true, deviceOS: DEVICE_OS, conLog: () => {} }
 
   if (server.transport === 'nethernet') {
-    return { ...common, transport: 'nethernet', nethernet: { networkId: ad?.networkId }, skipPing: true, connectTimeout: CONNECT_TIMEOUT_MS }
+    return { options: { ...common, transport: 'nethernet', nethernet: { networkId: ad?.networkId }, skipPing: true, connectTimeout: CONNECT_TIMEOUT_MS }, protocol, from }
   }
 
-  return { ...common, transport: 'raknet', port: server.port, raknetBackend: 'raknet-native' }
+  return { options: { ...common, transport: 'raknet', port: server.port, raknetBackend: 'raknet-native' }, protocol, from }
 }
 
-/** Joins `build`'s `server`, keeps what it sends (`Sent`), and runs `whileIn` once the client is in its world. */
-export async function joinServer(build: string, server: RunningServer, whileIn: () => Promise<void>): Promise<Sent> {
+/** A packet as bedrock-protocol decoded it */
+interface Decoded {
+  data: { name: string }
+  metadata: { size: number }
+  fullBuffer: Buffer
+}
+
+/** Joins `t`'s `server`, keeps what it sends (`Sent`), and runs `whileIn` once the client is in its world. */
+export async function joinServer(t: Target, server: RunningServer, whileIn: () => Promise<void>): Promise<Sent> {
   const { createClient } = await import('bedrock-protocol')
-  const client: Client = createClient(await joinOptions(build, server))
+  const { options, protocol, from } = await joinOptions(t, server)
+  const client: Client = createClient(options)
+  // a packet the export reads, decoded as an earlier version and read short: it changed since
+  let short: string | undefined
+
+  if (protocol !== undefined) {
+    // bedrock-protocol sets it from the version; the server takes only its own, which the client sends once connected
+    const settings = (client as unknown as { options: { protocolVersion: number } }).options
+    settings.protocolVersion = protocol
+    useProtocol(client, options.version as string, from as number, protocol)
+    client.on('packet', (packet: Decoded) => {
+      const { name } = packet.data
+
+      if (READ.includes(name) && packet.metadata.size !== packet.fullBuffer.length) {
+        short ??= `${name} decodes ${packet.metadata.size} of its ${packet.fullBuffer.length} bytes as ${options.version}`
+      }
+    })
+  }
+
   let itemStates: ItemState[] | undefined
   let creative: CreativeStack[] | undefined
   let player: string | undefined
@@ -218,6 +274,11 @@ export async function joinServer(build: string, server: RunningServer, whileIn: 
     }
 
     await whileIn()
+
+    // item_component may come after the others
+    if (short) {
+      throw new Error(`the client: ${short} (protocol ${protocol})`)
+    }
 
     function packet(name: Kept): Record<string, unknown> {
       return kept.get(name) ?? {}

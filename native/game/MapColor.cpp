@@ -499,8 +499,10 @@ std::optional<MapColorParts> inlinedMapColor(std::int64_t legacy, int slot, std:
             continue;
         }
         ++places;
-        auto const     code = memory::decode(begin, end, std::max(begin, at - 0x400), end);
-        std::ptrdiff_t h    = indexAt(code, at);
+        auto code = memory::decode(begin, end, std::max(begin, at - 0x400), end);
+        // from 1.26.60.25 a nop follows each call: what the reading below takes as next to each other, it parts
+        std::erase_if(code, [](Instruction const& x) { return x.insn.mnemonic == ZYDIS_MNEMONIC_NOP; });
+        std::ptrdiff_t h = indexAt(code, at);
         if (h < 0) {
             continue;
         }

@@ -3,32 +3,33 @@
 ```
 track (every 6 hours, or by hand with builds)
   versions/ ─> commit to main
-  └─ each release it added ─> support
-support (from track, or by hand with a build)
+  └─ each build it added (release or preview) ─> support
+support (from track, or by hand with a build and its channel)
   linux: export and check; then export and test
     passed ─> pull request "Support BDS <build>": linux "supported"
     failed ─> issue "Support BDS <build>", with the log
 extract (push to main: a merged support pull request, or a change to the export)
-  each supported release bedrock-data lacks ─> commit to bedrock-data main
+  each supported build bedrock-data lacks ─> commit to bedrock-data main
 ```
 
 - [track](../.github/workflows/track.yml) runs `pnpm track` and commits `versions/` to main. It then runs the support
-  workflow for each release it added. Run by hand with `builds` (and `channel`, `force`) to track those.
+  workflow for each build it added, release or preview. Run by hand with `builds` (and `channel`, `force`) to track
+  those.
 - [support](../.github/workflows/support.yml) builds the agent, runs `pnpm support --platform=linux` (the Linux zip,
   its server run with the agent), then `pnpm extract --force` and `pnpm test` where it passed. The export goes into a
   copy of bedrock-data that is kept only as the run's artifact, with the agent's log.
-  - Where it passes: the pull request `support/<build>` marks linux `"supported"` in `versions/release/<build>.json`
+  - Where it passes: the pull request `support/<build>` marks linux `"supported"` in `versions/<channel>/<build>.json`
     (or refreshes the open one).
   - Where it fails, or the tests fail: the issue "Support BDS \<build>" with the end of the log (or a comment on the
     open one). A build the agent cannot bind yet is supported by adding its bindings
     ([Development](development.md#a-new-build)) and running support again.
-  - CI runs Linux only: a release's Windows zip is supported locally, `pnpm support <build>` on Windows, committed by
+  - CI runs Linux only: a build's Windows zip is supported locally, `pnpm support <build>` on Windows, committed by
     hand.
 - [extract](../.github/workflows/extract.yml) builds the agent and runs `pnpm extract` on a push to main that changes
-  `versions/release/`, `src/`, `native/` or the dependencies, and commits the result straight to bedrock-data's main. A
-  release bedrock-data has the data of is left as it is: to export releases again after a fix, run it by hand with
-  `builds` and `force`. A release supported only on Windows (1.21.50.07) is exported locally on Windows, its commit
-  naming the extractor commit as extract's do.
+  `versions/release/`, `versions/preview/`, `src/`, `native/` or the dependencies, and commits the result straight to
+  bedrock-data's main. A build bedrock-data has the data of is left as it is: to export builds again after a fix, run
+  it by hand with `builds` and `force`. A build supported only on Windows (1.21.50.07) is exported locally on Windows,
+  its commit naming the extractor commit as extract's do.
 - [CI](../.github/workflows/ci.yml) runs `pnpm verify` and `pnpm test`, against bedrock-data's schemas, and builds the
   Linux agent.
 

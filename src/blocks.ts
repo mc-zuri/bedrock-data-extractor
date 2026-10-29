@@ -26,7 +26,7 @@ import { parseBiomes, parseEffects, parseEnums, parseTints, type Effect, type En
 import { biomesOf, blockStateOf, commandsOf, entitiesOf, recipesOf, type Attributes, type Biomes, type CommandsFile, type Entities, type Recipes } from './sent.ts'
 import { unpackServer } from './server.ts'
 import { f32 } from './util.ts'
-import { compareVersions, type Platform } from './versions.ts'
+import { compareVersions, type Platform, type Target } from './versions.ts'
 
 export const PALETTE_FILE = 'block_palette.nbt'
 export const SHAPES_FILE = 'block_shapes.json.gz'
@@ -695,14 +695,14 @@ export function readAgentOutput(out: string, serverDir: string, sent: Sent, help
   return { palette, states, shapes, blocks, items, enchantments, biomes, effects, enums, tints, recipes, entities, commands, attributes }
 }
 
-export async function readBlocks(zip: string, build: string, platform: Platform, work: string, signal?: AbortSignal): Promise<Blocks> {
+export async function readBlocks(zip: string, t: Target, platform: Platform, work: string, signal?: AbortSignal): Promise<Blocks> {
   const host = agentHost(platform)
   const server = join(work, 'server')
   const out = join(work, 'out')
   signal?.throwIfAborted()
   await unpackServer(zip, server, host)
-  const { sent, help } = await runAgent(server, build, host, out, signal)
+  const { sent, help } = await runAgent(server, t, host, out, signal)
   // only where itemsAsOnWindows needs them: 1.26.52 keeps some item files only in a binary form (`\x7fMCB`), not JSON
-  const packItems = numbersPackItemsOtherwise(build, platform) ? readPackItems(server) : []
+  const packItems = numbersPackItemsOtherwise(t.build, platform) ? readPackItems(server) : []
   return { ...readAgentOutput(out, server, sent, help), packItems }
 }

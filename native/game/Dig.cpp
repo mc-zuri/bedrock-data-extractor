@@ -93,10 +93,22 @@ public:
             if (!memory::inImage(base)) {
                 break;
             }
-            if (found.speed < 0 && speedLooks(slot, base) && distinct(slot, {pickaxe, sword, shears}) && speed(slot, pickaxe, stone) == 8.0f &&
-                speed(slot, woodenPickaxe, stone) == 2.0f && speed(slot, stick, stone) == 1.0f && speed(slot, shears, wool) == 5.0f && speed(slot, sword, web) == 15.0f &&
-                speed(slot, axe, log) == 8.0f) {
-                found.speed = slot;
+            if (found.speed < 0 && speedLooks(slot, base) && !distinct(slot, {pickaxe, sword, shears})) {
+                log::info("dig: slot {} looks like Item::getDestroySpeed but the stick, pickaxe, sword and shears do not each have their own", slot);
+            } else if (found.speed < 0 && speedLooks(slot, base)) {
+                float const answers[] = {speed(slot, pickaxe, stone), speed(slot, woodenPickaxe, stone), speed(slot, stick, stone),
+                                         speed(slot, shears, wool),   speed(slot, sword, web),           speed(slot, axe, log)};
+                if (answers[0] == 8.0f && answers[1] == 2.0f && answers[2] == 1.0f && answers[3] == 5.0f && answers[4] == 15.0f && answers[5] == 8.0f) {
+                    found.speed = slot;
+                } else {
+                    log::info("dig: slot {} looks like Item::getDestroySpeed but answers {} {} {} {} {} {} (known: 8 2 1 5 15 8)", slot, answers[0], answers[1], answers[2],
+                              answers[3], answers[4], answers[5]);
+                    if (std::isnan(speed(slot, pickaxe, stone))) {
+                        memory::Fault const f = memory::lastFault();
+                        log::info("dig: the pickaxe's (0x{:X}) faults at {}0x{:X} (code 0x{:X})", fn(pickaxe, slot) - memory::imageBase(), f.inImage ? "" : "absolute ", f.rva,
+                                  f.code);
+                    }
+                }
             }
             if (found.special < 0 && specialLooks(slot, base) && distinct(slot, {pickaxe, sword}) && fn(shears, slot) != base && special(slot, pickaxe, obsidian) == 1 &&
                 special(slot, woodenPickaxe, obsidian) == 0 && special(slot, woodenPickaxe, stone) == 1 && special(slot, stick, stone) == 0 && special(slot, shears, web) == 1) {

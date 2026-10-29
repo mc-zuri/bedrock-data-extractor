@@ -9,6 +9,20 @@ void test('builds compare part by part as numbers', () => {
   assert.deepEqual(['1.26.0.2', '1.21.130.3', '1.26.10.4', '1.9.0.15'].sort(compareVersions), ['1.9.0.15', '1.21.130.3', '1.26.0.2', '1.26.10.4'])
 })
 
+void test("a version's previews (from .20) come before its releases, and the version alone before both", () => {
+  assert.deepEqual(['1.26.60.5', '1.26.70.20', '1.26.60.30', '1.26.52.3', '1.26.60.21', '1.26.60.10', '1.26.60'].sort(compareVersions), [
+    '1.26.52.3',
+    '1.26.60',
+    '1.26.60.21',
+    '1.26.60.30',
+    '1.26.60.5',
+    '1.26.60.10',
+    '1.26.70.20',
+  ])
+  assert.ok(compareVersions('1.26.20.5', '1.26.20') > 0)
+  assert.equal(compareVersions('1.26.20', '1.26.20'), 0)
+})
+
 void test('a build is four numbers', () => {
   assert.ok(isBuild('1.21.42.01'))
   assert.ok(!isBuild('1.21.42'))

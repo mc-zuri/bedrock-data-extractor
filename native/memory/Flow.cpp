@@ -94,9 +94,26 @@ bool callsVirtual(std::uintptr_t begin, std::uintptr_t end, int thisReg, std::op
     constexpr int volatileRegs[] = {Rax, Rcx, Rdx, Rsi, Rdi, 8, 9, 10, 11};
 #endif
     std::map<std::pair<int, std::int64_t>, Holds> spilled;  // by base register (rsp, rbp) and displacement
-    // the registers at each conditional jump not yet followed: where a path ends (ret, jmp), the code after it is most
-    // often a branch's target, and the registers are as they were at the branch
-    std::vector<std::array<Holds, 16>> branches;
+    // the registers at each conditional jump not yet followed, and its target: where a path ends (ret, jmp), the code
+    // after it is most often a branch's target, and the registers are as they were at that branch (else at the last one:
+    // 1.26.60.25's Block::getMapColor ends its first path with a check of its stack's cookie, after the branch to the code
+    // that follows it)
+    struct Branch {
+        std::uintptr_t        target;
+        std::array<Holds, 16> regs;
+    };
+    std::vector<Branch> branches;
+    auto                resume = [&](std::uintptr_t next) {
+        if (branches.empty()) {
+            return;
+        }
+        auto it = std::ranges::find(branches, next, &Branch::target);
+        if (it == branches.end()) {
+            it = branches.end() - 1;
+        }
+        regs = it->regs;
+        branches.erase(it);
+    };
     auto isSlot = [&](std::int64_t disp) { return disp >= 0 && disp % 8 == 0 && std::ranges::find(slots, static_cast<int>(disp / 8)) != slots.end(); };
     // what [base + disp] holds, read from where `held` (the base's) is
     auto loaded = [&](Holds held, std::int64_t disp) {
@@ -119,20 +136,20 @@ bool callsVirtual(std::uintptr_t begin, std::uintptr_t end, int thisReg, std::op
             ++at;
             continue;
         }
+        std::uintptr_t const here = begin + at;
         at += insn.length;
         ZydisDecodedOperand const& a    = ops[0];
         ZydisDecodedOperand const& b    = ops[1];
         bool const                 memB = insn.operand_count_visible >= 2 && b.type == ZYDIS_OPERAND_TYPE_MEMORY && b.mem.index == ZYDIS_REGISTER_NONE;
 
         if (insn.meta.category == ZYDIS_CATEGORY_COND_BR) {
-            branches.push_back(regs);
+            ZyanU64 target = 0;
+            ZydisCalcAbsoluteAddress(&insn, &ops[0], here, &target);
+            branches.push_back({static_cast<std::uintptr_t>(target), regs});
             continue;
         }
         if (insn.mnemonic == ZYDIS_MNEMONIC_RET) {
-            if (!branches.empty()) {
-                regs = branches.back();
-                branches.pop_back();
-            }
+            resume(begin + at);
             continue;
         }
 
@@ -155,9 +172,8 @@ bool callsVirtual(std::uintptr_t begin, std::uintptr_t end, int thisReg, std::op
                 for (int reg : volatileRegs) {
                     regs[reg] = Holds::Nothing;
                 }
-            } else if (!branches.empty()) {
-                regs = branches.back();
-                branches.pop_back();
+            } else {
+                resume(begin + at);
             }
             continue;
         }

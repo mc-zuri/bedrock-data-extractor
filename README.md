@@ -1,6 +1,6 @@
 # bedrock-data-extractor
 
-Tracks every Bedrock Dedicated Server build minecraft.net offers, and exports what each supported release says into
+Tracks every Bedrock Dedicated Server build minecraft.net offers, and exports what each supported build says into
 [bedrock-data](https://github.com/mc-zuri/bedrock-data): its language, its block palette, each block state's shapes,
 facts, dig speeds, drops and map colour, its items, enchantments, biomes, mob effects, enum names and tint colours, and
 what its server sends a client of its recipes, entities, commands and the player's attributes.
@@ -19,8 +19,8 @@ git clone https://github.com/mc-zuri/bedrock-data ../bedrock-data
 pnpm install
 pnpm native            # the agent the servers load, for this OS
 pnpm track             # the builds minecraft.net offers now, into versions/
-pnpm support <build>   # a tracked release tried on this OS's platform, marked supported or not
-pnpm extract           # each supported release bedrock-data lacks, into ../bedrock-data
+pnpm support <build>   # a tracked build tried on this OS's platform, marked supported or not
+pnpm extract           # each supported build bedrock-data lacks, into ../bedrock-data
 pnpm status            # each build: its platforms, supported or not, and exported
 ```
 

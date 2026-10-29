@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { keepJson, Schemas } from './files.ts'
-import { CHANNELS, compareVersions, isBuild, PLATFORMS, type Channel, type Platform } from './versions.ts'
+import { CHANNELS, compareVersions, isBuild, PLATFORMS, targetName, trackCommand, type Channel, type Platform, type Target } from './versions.ts'
 
 interface Binary {
   url: string
@@ -48,18 +48,38 @@ export class VersionStore {
       .sort((a, b) => compareVersions(b, a))
   }
 
-  supportedBuilds(): string[] {
-    return this.builds('release').filter((build) => {
-      const json = this.read('release', build)
-      return PLATFORMS.some((p) => json?.binary[p]?.supported)
-    })
+  /** The builds supported on some platform: the releases, then the previews, each newest first */
+  supportedBuilds(): Target[] {
+    return CHANNELS.flatMap((channel) =>
+      this.builds(channel)
+        .filter((build) => {
+          const json = this.read(channel, build)
+          return PLATFORMS.some((p) => json?.binary[p]?.supported)
+        })
+        .map((build) => ({ channel, build })),
+    )
   }
 
-  setSupported(build: string, marks: Partial<Record<Platform, boolean>>): boolean {
-    const json = this.read('release', build)
+  /** `build` of `channel`, or of the one channel that tracks it */
+  target(build: string, channel?: Channel): Target {
+    const channels = channel ? [channel] : CHANNELS.filter((c) => this.read(c, build))
+
+    if (channels.length > 1) {
+      throw new Error(`${build} is tracked as a release and as a preview: name its channel (--channel=release|preview)`)
+    }
+
+    if (!channels.length || !this.read(channels[0], build)) {
+      throw new Error(`${channel ? `${channel}/` : ''}${build} is not tracked: ${trackCommand({ channel: channel ?? 'release', build })}`)
+    }
+
+    return { channel: channels[0], build }
+  }
+
+  setSupported(t: Target, marks: Partial<Record<Platform, boolean>>): boolean {
+    const json = this.read(t.channel, t.build)
 
     if (!json) {
-      throw new Error(`release ${build} is not tracked: pnpm track ${build}`)
+      throw new Error(`${targetName(t)} is not tracked: ${trackCommand(t)}`)
     }
 
     for (const platform of PLATFORMS) {

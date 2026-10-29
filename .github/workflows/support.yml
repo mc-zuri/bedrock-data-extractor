@@ -1,16 +1,22 @@
-# A tracked release made supported on Linux: its zip exported and checked with its server and the agent (pnpm
-# support), then exported (into a copy of bedrock-data, kept nowhere but as this run's artifact) and tested. Where it
-# passes, a pull request marks it "supported" in versions/release/<build>.json; merging it runs the extract workflow,
-# which exports the release into bedrock-data. Where it fails, an issue asks for its support, with the log. Windows is
-# supported locally (pnpm support <build> on Windows). Run by the track workflow for each new release, or by hand.
+# A tracked build (a release or a preview) made supported on Linux: its zip exported and checked with its server and
+# the agent (pnpm support), then exported (into a copy of bedrock-data, kept nowhere but as this run's artifact) and
+# tested. Where it passes, a pull request marks it "supported" in versions/<channel>/<build>.json; merging it runs the
+# extract workflow, which exports the build into bedrock-data. Where it fails, an issue asks for its support, with the
+# log. Windows is supported locally (pnpm support <build> on Windows). Run by the track workflow for each new build, or
+# by hand.
 name: support
 
 on:
   workflow_dispatch:
     inputs:
       build:
-        description: 'The tracked release to support, as its zip names it (1.26.52.3)'
+        description: 'The tracked build to support, as its zip names it (1.26.52.3)'
         required: true
+      channel:
+        description: "The build's channel"
+        type: choice
+        options: [release, preview]
+        default: release
 
 permissions:
   contents: write
@@ -27,6 +33,7 @@ jobs:
     timeout-minutes: 60
     env:
       BUILD: ${{ inputs.build }}
+      CHANNEL: ${{ inputs.channel }}
       BRANCH: support/${{ inputs.build }}
       BEDROCK_DATA_DIR: bedrock-data
       GH_TOKEN: ${{ github.token }}
@@ -54,15 +61,15 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pnpm support "$BUILD" --platform=linux 2>&1 | tee support.log || echo 'failed=true' >> "$GITHUB_OUTPUT"
-          if ! git diff --quiet -- "versions/release/$BUILD.json"; then echo 'marked=true' >> "$GITHUB_OUTPUT"; fi
+          pnpm support "$BUILD" --channel="$CHANNEL" --platform=linux 2>&1 | tee support.log || echo 'failed=true' >> "$GITHUB_OUTPUT"
+          if ! git diff --quiet -- "versions/$CHANNEL/$BUILD.json"; then echo 'marked=true' >> "$GITHUB_OUTPUT"; fi
       - name: Export and test
         id: test
         if: steps.support.outputs.marked == 'true'
         shell: bash
         run: |
           set -o pipefail
-          { pnpm extract "$BUILD" --force && pnpm test; } 2>&1 | tee -a support.log
+          { pnpm extract "$BUILD" --channel="$CHANNEL" --force && pnpm test; } 2>&1 | tee -a support.log
       - name: Keep what it exported
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,20 +77,20 @@ jobs:
           name: support-${{ inputs.build }}
           path: |
             support.log
-            bedrock-data/release/${{ inputs.build }}/
-            cache/release/${{ inputs.build }}/*/out/agent.log
+            bedrock-data/${{ inputs.channel }}/${{ inputs.build }}/
+            cache/${{ inputs.channel }}/${{ inputs.build }}/*/out/agent.log
           if-no-files-found: ignore
       - name: Open the pull request
         if: steps.support.outputs.marked == 'true' && steps.test.outcome == 'success'
         run: |
-          platforms=$(grep -oE "release/$BUILD: supported on .*\(" support.log | sed -E 's/.*supported on (.*) \(/\1/')
+          platforms=$(grep -oE "$CHANNEL/$BUILD: supported on .*\(" support.log | sed -E 's/.*supported on (.*) \(/\1/')
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git switch -c "$BRANCH"
-          git add "versions/release/$BUILD.json"
+          git add "versions/$CHANNEL/$BUILD.json"
           git commit -q -m "Support $BUILD on $platforms"
           git push -q --force origin "$BRANCH"
-          exported=$(grep -E "release/$BUILD: " support.log | sed 's/^ *//')
+          exported=$(grep -E "$CHANNEL/$BUILD: " support.log | sed 's/^ *//')
           body=$(printf 'Exports and passes the tests on %s.\n\n```\n%s\n```\n\nMerging this runs the extract workflow, which exports it into bedrock-data. What it exported is the run'"'"'s artifact: %s\n' "$platforms" "$exported" "$RUN_URL")
           if [ "$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null)" = OPEN ]; then
             gh pr edit "$BRANCH" --body "$body"

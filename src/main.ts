@@ -10,10 +10,10 @@ import { agentHost, host, hostPlatform } from './platform.ts'
 import { unpackServer } from './server.ts'
 import { importedSkin, recordedSkin, STEVE_FILE } from './steve.ts'
 import { support } from './support.ts'
-import { isTracked, targetName, track, type Target } from './track.ts'
+import { isTracked, track, type Offer } from './track.ts'
 import { errorMessage, forEach } from './util.ts'
 import { VersionStore } from './versionStore.ts'
-import { CHANNELS, isBuild, isChannel, PLATFORMS, type Platform } from './versions.ts'
+import { CHANNELS, isBuild, isChannel, PLATFORMS, targetName, type Channel, type Platform, type Target } from './versions.ts'
 
 interface Options {
   builds: string[]
@@ -36,11 +36,11 @@ const steps: Record<string, Step> = {
   },
   support: {
     about:
-      '<build...> [--platform=linux|windows]: the platform of this machine (its OS) of tracked releases read and checked as extract would; marked supported or not in versions/release/<build>.json',
+      '<build...> [--platform=linux|windows] [--channel=release|preview]: the platform of this machine (its OS) of tracked builds read and checked as extract would; marked supported or not in versions/<channel>/<build>.json',
     run: supportBuilds,
   },
   extract: {
-    about: 'each supported release bedrock-data has not got the data of (or the builds named): its data into bedrock-data (--force: again, where it has)',
+    about: 'each supported build bedrock-data has not got the data of (or the builds named): its data into bedrock-data (--force: again, where it has)',
     run: extractBuilds,
   },
   steve: {
@@ -50,7 +50,7 @@ const steps: Record<string, Step> = {
   },
   native: { about: 'builds the native agent (xmake) for the OS of this machine', run: () => host().buildAgent() },
   check: {
-    about: '<build...>: the bindings of the agent resolved against the server of each tracked release on this platform, without starting it (one build: every binding)',
+    about: '<build...>: the bindings of the agent resolved against the server of each tracked build on this platform, without starting it (one build: every binding)',
     run: checkBindings,
   },
   status: { about: 'each build in versions/, the platforms it is supported on, and whether bedrock-data has its data', run: status },
@@ -68,8 +68,24 @@ function checkNames(builds: string[]): void {
   }
 }
 
-async function offered(): Promise<Target[]> {
-  const targets = new Map<string, Target & { platforms: Platform[] }>()
+/** The builds named, each of the channel --channel names, else of the one that tracks it */
+function targets(store: VersionStore, builds: string[], values: Map<string, string>): Target[] {
+  checkNames(builds)
+  return builds.map((build) => store.target(build, channelOption(values)))
+}
+
+function channelOption(values: Map<string, string>): Channel | undefined {
+  const channel = values.get('channel')
+
+  if (channel !== undefined && !isChannel(channel)) {
+    throw new Error(`--channel: ${CHANNELS.join(' or ')}, not ${channel}`)
+  }
+
+  return channel
+}
+
+async function offered(): Promise<Offer[]> {
+  const targets = new Map<string, Offer & { platforms: Platform[] }>()
 
   for (const link of await fetchLinks()) {
     const key = `${link.channel}/${link.build}`
@@ -84,12 +100,7 @@ async function offered(): Promise<Target[]> {
 }
 
 async function trackBuilds({ builds, force, values }: Options): Promise<string[]> {
-  const channel = values.get('channel') ?? 'release'
-
-  if (!isChannel(channel)) {
-    throw new Error(`--channel: ${CHANNELS.join(' or ')}, not ${channel}`)
-  }
-
+  const channel = channelOption(values) ?? 'release'
   checkNames(builds)
   const store = versionStore()
   const targets = builds.length ? builds.map((build) => ({ channel, build })) : await offered()
@@ -110,10 +121,9 @@ async function trackBuilds({ builds, force, values }: Options): Promise<string[]
 
 async function supportBuilds({ builds, values }: Options): Promise<string[]> {
   if (!builds.length) {
-    throw new Error('support: name the releases, as their zips name them (1.26.52.3)')
+    throw new Error('support: name the builds, as their zips name them (1.26.52.3)')
   }
 
-  checkNames(builds)
   const platform = values.get('platform') ?? hostPlatform()
   const platforms = PLATFORMS.filter((p) => p === platform)
 
@@ -123,48 +133,37 @@ async function supportBuilds({ builds, values }: Options): Promise<string[]> {
 
   agentHost(platforms[0])
   const store = versionStore()
-  const untracked = builds.filter((b) => !store.read('release', b))
-
-  if (untracked.length) {
-    throw new Error(`not tracked as releases: ${untracked.join(', ')} (pnpm track <build>)`)
-  }
-
+  const todo = targets(store, builds, values)
   const failed: string[] = []
-  const errors = await forEach(
-    builds,
-    JOBS,
-    (build) => `release/${build}`,
-    async (build) => {
-      const result = await support(store, build, platforms, CACHE_DIR)
+  const errors = await forEach(todo, JOBS, targetName, async (t) => {
+    const result = await support(store, t, platforms, CACHE_DIR)
 
-      for (const f of result.failed) {
-        failed.push(`release/${build} (${f.platform})`)
-        console.error(`  release/${build}: ${f.platform} FAILED: ${f.error}`)
-      }
+    for (const f of result.failed) {
+      failed.push(`${targetName(t)} (${f.platform})`)
+      console.error(`  ${targetName(t)}: ${f.platform} FAILED: ${f.error}`)
+    }
 
-      return result.supported.length ? `supported on ${result.supported.join(', ')}` : undefined
-    },
-  )
+    return result.supported.length ? `supported on ${result.supported.join(', ')}` : undefined
+  })
   return [...errors, ...failed]
 }
 
-async function extractBuilds({ builds, force }: Options): Promise<string[]> {
-  checkNames(builds)
+async function extractBuilds({ builds, force, values }: Options): Promise<string[]> {
   const store = versionStore()
   const repo = new DataRepo(BEDROCK_DATA_DIR)
   console.log(`bedrock-data: ${repo.root}`)
-  let todo = (builds.length ? builds : store.supportedBuilds()).filter((build) => force || !isExtracted(repo, build))
+  let todo = (builds.length ? targets(store, builds, values) : store.supportedBuilds()).filter((t) => force || !isExtracted(repo, t))
 
   if (!builds.length) {
-    todo = todo.filter((build) => {
-      const version = store.read('release', build)
+    todo = todo.filter((t) => {
+      const version = store.read(t.channel, t.build)
       const from = version && exportPlatform(version)
 
       if (!from || from === hostPlatform()) {
         return true
       }
 
-      console.log(`  release/${build}: exported from ${from}: pnpm extract ${build} there`)
+      console.log(`  ${targetName(t)}: exported from ${from}: pnpm extract ${t.build} there`)
       return false
     })
   }
@@ -173,12 +172,7 @@ async function extractBuilds({ builds, force }: Options): Promise<string[]> {
     console.log('  nothing to extract')
   }
 
-  const failed = await forEach(
-    todo,
-    JOBS,
-    (build) => `release/${build}`,
-    (build, signal) => extract(repo, store, build, force, CACHE_DIR, readBlocks, signal),
-  )
+  const failed = await forEach(todo, JOBS, targetName, (t, signal) => extract(repo, store, t, force, CACHE_DIR, readBlocks, signal))
 
   if (repo.writeVersions()) {
     console.log('  versions.json written')
@@ -196,7 +190,7 @@ async function steveBuilds({ builds, force, values }: Options): Promise<string[]
   const repo = new DataRepo(BEDROCK_DATA_DIR)
   const dir = values.get('import')
   const port = Number(values.get('port') ?? STEVE_PORT)
-  const todo = builds.length ? builds : dir ? repo.builds().filter((build) => importedSkin(dir, build)) : []
+  const todo = builds.length ? builds : dir ? repo.builds('release').filter((build) => importedSkin(dir, build)) : []
 
   if (!todo.length) {
     throw new Error('steve: name the releases (or --import=<dir>, which takes every one it has)')
@@ -205,8 +199,10 @@ async function steveBuilds({ builds, force, values }: Options): Promise<string[]
   const failed: string[] = []
 
   for (const build of todo) {
+    const release: Target = { channel: 'release', build }
+
     try {
-      if (!dir && !force && repo.readBuild(build)?.data.steve) {
+      if (!dir && !force && repo.readBuild(release)?.data.steve) {
         console.log(`  release/${build}: ${STEVE_FILE} already there`)
         continue
       }
@@ -218,7 +214,7 @@ async function steveBuilds({ builds, force, values }: Options): Promise<string[]
       }
 
       checkSteve(skin)
-      console.log(`  release/${build}: ${repo.writeSteve(build, skin) ? `${STEVE_FILE} written` : 'unchanged'}`)
+      console.log(`  release/${build}: ${repo.writeSteve(release, skin) ? `${STEVE_FILE} written` : 'unchanged'}`)
     } catch (e) {
       failed.push(`release/${build}`)
       console.log(`  release/${build}: FAILED: ${errorMessage(e)}`)
@@ -230,44 +226,38 @@ async function steveBuilds({ builds, force, values }: Options): Promise<string[]
 
 async function checkBindings({ builds, values }: Options): Promise<string[]> {
   if (!builds.length) {
-    throw new Error('check: name the releases, as their zips name them (1.26.52.3)')
+    throw new Error('check: name the builds, as their zips name them (1.26.52.3)')
   }
 
-  checkNames(builds)
   const h = agentHost(isPlatform(values.get('platform')))
   const store = versionStore()
-  return forEach(
-    builds,
-    JOBS,
-    (build) => `release/${build}`,
-    async (build) => {
-      const version = store.read('release', build)
+  return forEach(targets(store, builds, values), JOBS, targetName, async (t) => {
+    const version = store.read(t.channel, t.build)
 
-      if (!version) {
-        throw new Error(`not tracked: pnpm track ${build}`)
-      }
+    if (!version) {
+      throw new Error(`not tracked: pnpm track ${t.build}`)
+    }
 
-      const server = join(workDir(CACHE_DIR, build, h.platform), 'server')
-      await unpackServer(await trackedZip(version, h.platform, CACHE_DIR), server, h)
-      const { ok, output } = h.check(join(server, h.serverExe), build)
-      rmSync(server, { recursive: true, force: true })
+    const server = join(workDir(CACHE_DIR, t, h.platform), 'server')
+    await unpackServer(await trackedZip(version, h.platform, CACHE_DIR), server, h)
+    const { ok, output } = h.check(join(server, h.serverExe), t.build)
+    rmSync(server, { recursive: true, force: true })
 
-      if (builds.length === 1) {
-        console.log(output)
-      }
+    if (builds.length === 1) {
+      console.log(output)
+    }
 
-      if (!ok) {
-        throw new Error(
-          output
-            .split('\n')
-            .filter((line) => line.startsWith('FAILED'))
-            .join('; ') || output,
-        )
-      }
+    if (!ok) {
+      throw new Error(
+        output
+          .split('\n')
+          .filter((line) => line.startsWith('FAILED'))
+          .join('; ') || output,
+      )
+    }
 
-      return `${h.platform}: every binding resolves`
-    },
-  )
+    return `${h.platform}: every binding resolves`
+  })
 }
 
 function isPlatform(value: string | undefined): Platform | undefined {
@@ -297,7 +287,7 @@ function status(): void {
     for (const build of store.builds(channel)) {
       const json = store.read(channel, build)
       const isSupported = PLATFORMS.some((p) => json?.binary[p]?.supported)
-      const data = channel === 'preview' ? '' : isExtracted(repo, build) ? 'extracted' : isSupported ? 'MISSING' : '-'
+      const data = isExtracted(repo, { channel, build }) ? 'extracted' : isSupported ? 'MISSING' : '-'
       rows.push([channel, build, json?.version ?? '?', zip(json, 'linux'), zip(json, 'windows'), data])
     }
   }

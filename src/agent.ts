@@ -5,6 +5,7 @@ import { joinServer, type Sent } from './client.ts'
 import { commandHelp } from './commandHelp.ts'
 import type { Host } from './platform.ts'
 import { start, transportOf, type RunningServer } from './server.ts'
+import type { Target } from './versions.ts'
 
 // the slowest builds draw their drops for minutes (1.20.61: ten alone, more beside other servers)
 const AGENT_TIMEOUT_MS = 1_800_000
@@ -42,13 +43,13 @@ export interface AgentRun {
 }
 
 /** One run of the agent in the server at `serverDir`; `signal` ends the server, failing the run. */
-export async function runAgent(serverDir: string, build: string, host: Host, out: string, signal?: AbortSignal): Promise<AgentRun> {
+export async function runAgent(serverDir: string, t: Target, host: Host, out: string, signal?: AbortSignal): Promise<AgentRun> {
   signal?.throwIfAborted()
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
 
   const result = join(out, 'result.txt')
-  const server = await start(serverDir, host, { ...host.agentEnv, BDG_VERSION: build, BDG_OUT: out }, transportOf(build))
+  const server = await start(serverDir, host, { ...host.agentEnv, BDG_VERSION: t.build, BDG_OUT: out }, transportOf(t.build))
 
   function stop(): void {
     void server.kill()
@@ -59,7 +60,7 @@ export async function runAgent(serverDir: string, build: string, host: Host, out
   try {
     signal?.throwIfAborted()
     const inDimension = (await server.command(TICKING_AREA, [...ADDED, 'dimension not found'])) !== 'dimension not found'
-    const sent = await joinServer(build, server, async () => {
+    const sent = await joinServer(t, server, async () => {
       if (!inDimension) {
         await keepChunksLoaded(server)
       }

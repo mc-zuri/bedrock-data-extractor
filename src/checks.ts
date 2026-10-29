@@ -523,6 +523,13 @@ export function checkCommands({ commands, enums }: CommandsFile): void {
     throw new Error(`the console gives no usage of ${undescribed.name}: ${JSON.stringify(undescribed.help)}`)
   }
 
+  // a console read wrong: 1.20.61's `tag` once began `\uFFFD\uFFFDe`, a § split between two reads
+  const garbled = commands.find((c) => !c.help[0]?.startsWith(c.name) || c.help.some((line) => line.includes('\uFFFD')))
+
+  if (garbled) {
+    throw new Error(`the console's help of ${garbled.name} is garbled: ${JSON.stringify(garbled.help)}`)
+  }
+
   if (!commands.some((c) => c.name === 'teleport' && c.aliases.includes('tp')) || !enums.GameMode?.length) {
     throw new Error('no teleport (tp), or no GameMode values')
   }

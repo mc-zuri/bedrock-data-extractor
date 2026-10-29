@@ -1,12 +1,12 @@
 # How it works
 
-| file                              | holds                                                                    | written by                                               |
-| --------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------- |
-| `versions/<channel>/<build>.json` | a build (release or preview) and each platform's zip: URL, sha256, size  | `pnpm track`                                             |
-|                                   | each zip's `supported`: whether the release is exported from it          | `pnpm track` (`false`), `pnpm support` (`true`, `false`) |
-| `versions/versions.json`          | each channel's builds, newest first                                      | `pnpm track`                                             |
-| bedrock-data `release/<build>/…`  | what was exported from a release (bedrock-data's README says the format) | `pnpm extract`                                           |
-| bedrock-data `versions.json`      | the releases bedrock-data has                                            | `pnpm extract`                                           |
+| file                               | holds                                                                   | written by                                               |
+| ---------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- |
+| `versions/<channel>/<build>.json`  | a build (release or preview) and each platform's zip: URL, sha256, size | `pnpm track`                                             |
+|                                    | each zip's `supported`: whether the build is exported from it           | `pnpm track` (`false`), `pnpm support` (`true`, `false`) |
+| `versions/versions.json`           | each channel's builds, newest first                                     | `pnpm track`                                             |
+| bedrock-data `<channel>/<build>/…` | what was exported from a build (bedrock-data's README says the format)  | `pnpm extract`                                           |
+| bedrock-data `versions.json`       | the releases and previews bedrock-data has                              | `pnpm extract`                                           |
 
 A build is named as its zip names it: `1.21.42.01` (`bedrock-server-1.21.42.01.zip`), never `1.21.42.1`.
 
@@ -26,11 +26,11 @@ A build is named as its zip names it: `1.21.42.01` (`bedrock-server-1.21.42.01.z
 
 ```sh
 pnpm track [builds...] [--channel=preview] [--force]
-pnpm support <builds...> [--platform=linux|windows]
-pnpm extract [builds...] [--force]
+pnpm support <builds...> [--platform=linux|windows] [--channel=release|preview]
+pnpm extract [builds...] [--channel=release|preview] [--force]
 pnpm steve <builds...> [--port=19150] [--force] | pnpm steve --import=<dir> [builds...]
 pnpm native
-pnpm check <builds...> [--platform=linux|windows]
+pnpm check <builds...> [--platform=linux|windows] [--channel=release|preview]
 pnpm status
 ```
 
@@ -40,15 +40,17 @@ pnpm status
   and starts unsupported. A build already tracked costs nothing, so a run that finds nothing new makes one request.
   Tracking a build again (`--force`) keeps a platform supported only where its zip is the same. The API only names the
   latest builds; an older one is found by its URL alone.
-- **support** reads and checks a tracked release's zip as extract would, without writing to bedrock-data, and marks
+- **support**, **extract** and **check** take a build named as of the channel that tracks it (`--channel` names it,
+  where both do). A preview is supported and exported as a release is, into bedrock-data's `preview/<build>/`.
+- **support** reads and checks a tracked build's zip as extract would, without writing to bedrock-data, and marks
   the platform `"supported": true` where it passes, `false` where it fails. It runs the platform of this machine (its
-  OS: a server runs only there), or the one `--platform` names, which must be it. Previews are never supported.
-- **extract** takes each release supported on some platform that bedrock-data has not got every kind of (or the
-  builds named), and:
+  OS: a server runs only there), or the one `--platform` names, which must be it.
+- **extract** takes each build (release, then preview) supported on some platform that bedrock-data has not got every
+  kind of (or the builds named), and:
   1. downloads the zip of the platform it is supported on (linux's where both are) into `CACHE_DIR`;
   2. refuses it unless it is the zip `versions/` hashed;
   3. reads its language out of the zip, without unpacking it: each resource pack's `texts/en_US.lang`. One that the
-     pack's `contents.json` lists and the zip lacks is read from the release's other zip, refused where that has none
+     pack's `contents.json` lists and the zip lacks is read from the build's other zip, refused where that has none
      (1.16.220.02's Linux zip has no `texts` in its chemistry pack; its Windows zip has);
   4. unpacks its server, starts it on a new flat world, joins it with a client (what the server sends a client: the
      item registry, the creative list and item_component; the biome definitions, the entity identifiers, the crafting
@@ -61,11 +63,11 @@ pnpm status
      `0.95`, not `0.95000005`; from 1.21.42, 21 blocks' explosion resistance, `4.2000003`, not `4.2`), and before
      1.26.40 the ids of the items a `vanilla_<version>` pack defines (the spears, bundles, trial keys): each pack's ids
      go to its items in the order NTFS lists their files (`src/packItems.ts`);
-  6. writes it into bedrock-data, with `build.json`: the release, each zip's URL, sha256 and size, and which platform
+  6. writes it into bedrock-data, with `build.json`: the build, each zip's URL, sha256 and size, and which platform
      each kind was read from.
 
-  A release bedrock-data has every kind of is skipped unless `--force`d. A release exported from another platform than
-  this machine's is left for one that runs it (named, it fails). A zip and its server are deleted once the release is
+  A build bedrock-data has every kind of is skipped unless `--force`d. A build exported from another platform than
+  this machine's is left for one that runs it (named, it fails). A zip and its server are deleted once the build is
   done; one that failed keeps them, and the agent's log. `JOBS` builds at a time, each server on ports of its own; the
   first failure stops the run (the servers running are ended, none is started after it).
 
@@ -75,7 +77,7 @@ pnpm status
   persona id in it made a fixed one (the account's is not kept), into `release/<build>/steve.json.gz` and its entry in
   `build.json`, one release at a time. `--import=<dir>` takes earlier captures instead, `<dir>/<build>/steve.json` (every
   release that has one, unless builds are named). The release must be extracted first; extract keeps its steve.
-- **native** builds the agent for this machine's OS; **check** resolves its bindings against each named release's
+- **native** builds the agent for this machine's OS; **check** resolves its bindings against each named build's
   server without starting it, and prints every binding where one is named.
 - **status** prints each tracked build, each platform as `supported`, `zip` (not supported) or `-` (no zip), and
   whether bedrock-data has its data.
@@ -92,8 +94,13 @@ The blocks are what the running server says, so they are read inside it: `native
 
 Before it is loaded, node adds a ticking area (`tickingarea add`), so a chunk far from the world origin stays loaded
 with no player there: the agent sets blocks in it. Before 1.17.0 the console runs no command in a dimension, and the
-joined client's player runs it (`execute @a`). The client is bedrock-protocol's, joining as the build's version (else
-as the protocol the server advertises).
+joined client's player runs it (`execute @a`). The client is bedrock-protocol's, joining as a release's own version,
+else as the version of the protocol the server advertises. Where bedrock-protocol knows none of that protocol (every
+preview's: 1.26.60.21 advertises 2207, the newest bedrock-protocol 3.60.1 knows is 1.26.51's 2193), it decodes as the
+newest version it knows before that protocol and says it speaks the server's. `src/protocol.ts` changes that version's
+definition by what each protocol since changed in the packets a server sends, as Mojang's protocol docs
+([bedrock-protocol-docs](https://github.com/Mojang/bedrock-protocol-docs), a tag per preview) give it (1.26.60.28's
+start_game has a field more); each packet the export reads must decode to its last byte, or the export fails.
 
 It binds what it calls for the running build (`native/bindings/`: Windows by byte patterns, slots and offsets; Linux
 by the server's own symbols where it ships them, 1.16.201 to 1.21.2 but 1.17.0, else as Windows), hooks `Level::tick`,

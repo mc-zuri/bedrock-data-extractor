@@ -8,7 +8,7 @@ import type { BlockFacts, Blocks, BlockShapes, BlockState, Items, StateFacts } f
 import { BEDROCK_DATA_DIR, SCHEMAS_DIR } from '../src/config.ts'
 import type { ReadBlocks } from '../src/extract.ts'
 import { VersionStore, type VersionJson } from '../src/versionStore.ts'
-import { zipUrl, type Platform } from '../src/versions.ts'
+import { versionOf, zipUrl, type Channel, type Platform, type Target } from '../src/versions.ts'
 
 /** A zip of `files` (name -> content), each deflated: as a server zip is. */
 export function writeZip(file: string, files: Record<string, string | Buffer>): void {
@@ -68,32 +68,33 @@ export function emptyDataRepo(): string {
 export const VANILLA = Array.from({ length: 6000 }, (_, i) => `tile.block_${i}.name=Block ${i}`).join('\n')
 
 /**
- * A tracked release whose zips are already in the cache, as finished downloads leave them: nothing is fetched.
- * `zips`: each platform's vanilla en_US.lang, or every file of its zip; `supported`: the platforms marked so;
- * `wrongSha`: those tracked with another zip's sha256.
+ * A tracked release (or a build of `channel`) whose zips are already in the cache, as finished downloads leave them:
+ * nothing is fetched. `zips`: each platform's vanilla en_US.lang, or every file of its zip; `supported`: the platforms
+ * marked so; `wrongSha`: those tracked with another zip's sha256.
  */
 export function cachedRelease(
   build: string,
   zips: Partial<Record<Platform, string | Record<string, string>>>,
   supported: Platform[] = [],
   wrongSha: Platform[] = [],
+  channel: Channel = 'release',
 ): { store: VersionStore; cache: string } {
   const cache = tempDir()
   const store = new VersionStore(join(tempDir(), 'versions'), SCHEMAS_DIR)
   const binary: VersionJson['binary'] = {}
 
   for (const [platform, files] of Object.entries(zips) as [Platform, string | Record<string, string>][]) {
-    const zip = join(cache, 'release', build, `${platform}.zip`)
+    const zip = join(cache, channel, build, `${platform}.zip`)
     mkdirSync(dirname(zip), { recursive: true })
     writeZip(
       zip,
       typeof files === 'string' ? { 'resource_packs/vanilla/texts/en_US.lang': files, 'resource_packs/chemistry/texts/en_US.lang': 'item.element_1.name=Hydrogen\n' } : files,
     )
     const sha256 = wrongSha.includes(platform) ? 'd'.repeat(64) : createHash('sha256').update(readFileSync(zip)).digest('hex')
-    binary[platform] = { url: zipUrl(build, 'release', platform), sha256, size: statSync(zip).size, supported: supported.includes(platform) }
+    binary[platform] = { url: zipUrl(build, channel, platform), sha256, size: statSync(zip).size, supported: supported.includes(platform) }
   }
 
-  store.write({ build, version: build.split('.').slice(0, 3).join('.'), channel: 'release', binary })
+  store.write({ build, version: versionOf(build, channel), channel, binary })
   return { store, cache }
 }
 
@@ -421,11 +422,11 @@ export function itemsNbt(items: Items): Buffer {
   return nbt.writeUncompressed({ type: 'compound', name: '', value } as nbt.NBT, 'big')
 }
 
-/** What reads a release's blocks, where no server runs: `answer` for every zip (an Error: thrown). Each call is noted in `calls`. */
+/** What reads a build's blocks, where no server runs: `answer` for every zip (an Error: thrown). Each call is noted in `calls`. */
 export function fakeBlocks(answer: Blocks | Error = sampleBlocks()): ReadBlocks & { calls: { build: string; platform: Platform }[] } {
   const calls: { build: string; platform: Platform }[] = []
-  async function read(_zip: string, build: string, platform: Platform): Promise<Blocks> {
-    calls.push({ build, platform })
+  async function read(_zip: string, t: Target, platform: Platform): Promise<Blocks> {
+    calls.push({ build: t.build, platform })
     await Promise.resolve()
 
     if (answer instanceof Error) {

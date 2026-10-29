@@ -9,13 +9,18 @@
 
 namespace bdg::game {
 
-// A stack of one item, without enchantments or user data (1.16 - 1.26: the WeakPtr<Item> at +8, a pointer to the Item
-// pointer; the Block* at +0x18, a block item's state; the count at +0x22, bool mValid at +0x23). Every use checks
-// answers the game is known to give.
+// The game's ItemStack vtable, read from a stack its own drop code returned (game/Drops.cpp); 0 until one has. From
+// 1.26.60 DiggerItem::getDestroySpeed asks its stack a virtual (whether it is enchanted), which a stack without one faults.
+inline std::uintptr_t gStackVtable = 0;
+
+// A stack of one item, without enchantments or user data (1.16 - 1.26: the ItemStack vtable at +0; the WeakPtr<Item> at
+// +8, a pointer to the Item pointer; the Block* at +0x18, a block item's state; the count at +0x22, bool mValid at
+// +0x23). Every use checks answers the game is known to give.
 class alignas(16) StackOfOne {
 public:
     void const* of(std::uintptr_t item, std::uintptr_t block = 0) {
         std::memset(bytes, 0, sizeof bytes);
+        std::memcpy(bytes, &gStackVtable, 8);
         holder[0]                   = item;
         std::uintptr_t const target = reinterpret_cast<std::uintptr_t>(&holder[0]);
         std::memcpy(bytes + 8, &target, 8);

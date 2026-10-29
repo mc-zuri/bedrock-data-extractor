@@ -5,6 +5,7 @@
 #include "core/Log.h"
 #include "game/MapColor.h"
 #include "game/Registry.h"
+#include "game/Virtuals.h"
 #include "memory/Flow.h"
 #include "memory/Guard.h"
 #include "memory/Hook.h"
@@ -101,6 +102,13 @@ Stack stackAt(std::uintptr_t stack) {
     std::uintptr_t const block = readPtr(stack + 0x18);
     std::int16_t const   aux   = read<std::int16_t>(stack, 0x20);
     return {readPtr(readPtr(stack + 8)), read<std::uint8_t>(stack, 0x22), aux, block && aux != 0x7FFF ? read<std::uint16_t>(block, gBlockDataAt) : aux};
+}
+
+// the vtable of one of the game's own stacks, for the stacks of one the agent asks Item virtuals with (game/Virtuals.h)
+void keepStackVtable(std::uintptr_t stack) {
+    if (std::uintptr_t const vtable = readPtr(stack); !gStackVtable && inImage(vtable)) {
+        gStackVtable = vtable;
+    }
 }
 
 // the exception (the signal, on Linux) a call below faulted with, and where
@@ -400,6 +408,7 @@ void* hookedSpawnItem(void* spawner, void* region, std::uintptr_t stack, void* a
     if (!gSpawned) {
         return gSpawnItem(spawner, region, stack, actor, pos, throwTime);
     }
+    keepStackVtable(stack);
     gSpawned->push_back(stackAt(stack));
     return nullptr;
 }
@@ -413,7 +422,8 @@ constexpr int          TwisterWords = 624;
 
 // What a virtual draws from: the twister `n` into the object (`add rcx, n` with MSVC, `add rdi, n` with the Itanium ABI,
 // then the call, or clang's tail jump), or the one a pointer `at` into the object points at (1.26.51: `mov rcx,
-// [rcx + at]`, `xor edx, edx`, then the call; `mov rdi, [rdi + at]`, `xor esi, esi` on Linux), and the call's target
+// [rcx + at]`, `xor edx, edx`, then the call; `mov rdi, [rdi + at]`, `xor esi, esi` on Linux; from 1.26.60, after a check
+// of the thread it is drawn on, `this` kept in rbx, rsi or rdi: `mov rcx, [rsi + at]`), and the call's target
 struct DrawsFrom {
     std::int64_t   in = -1, pointerAt = -1;
     std::uintptr_t generator                          = 0;
@@ -422,8 +432,13 @@ struct DrawsFrom {
 
 DrawsFrom drawsFrom(std::uintptr_t at, int slot) {
     std::uintptr_t const fn = memory::virtualAt(at, slot);
-    std::uint8_t         code[32];
-    if (!fn || !memory::safeRead(reinterpret_cast<void const*>(fn), code, sizeof code)) {
+    std::uint8_t         code[0x80];
+    std::size_t          size = sizeof code;
+    // a function at the end of the code has less after it
+    while (fn && size >= 32 && !memory::safeRead(reinterpret_cast<void const*>(fn), code, size)) {
+        size /= 2;
+    }
+    if (!fn || size < 32) {
         return {};
     }
     auto callAt = [&](std::size_t i) {
@@ -432,26 +447,37 @@ DrawsFrom drawsFrom(std::uintptr_t at, int slot) {
         return fn + i + 5 + rel;
     };
 #ifdef _WIN32
-    constexpr std::uint8_t ThisRegister = 0xC1;  // rcx
-    auto const             isCall       = [](std::uint8_t op) { return op == 0xE8; };
-    // mov rcx, [rcx + disp32]; xor edx, edx
-    std::uint8_t const loadThis[] = {0x48, 0x8B, 0x89}, clearSecond[] = {0x31, 0xD2};
+    constexpr std::uint8_t This   = 1;  // rcx
+    auto const             isCall = [](std::uint8_t op) { return op == 0xE8; };
+    // xor edx, edx
+    std::uint8_t const clearSecond[] = {0x31, 0xD2};
 #else
-    constexpr std::uint8_t ThisRegister = 0xC7;  // rdi
+    constexpr std::uint8_t This = 7;  // rdi
     auto const isCall = [](std::uint8_t op) { return op == 0xE8 || op == 0xE9; };
-    // mov rdi, [rdi + disp32]; xor esi, esi
-    std::uint8_t const loadThis[] = {0x48, 0x8B, 0xBF}, clearSecond[] = {0x31, 0xF6};
+    // xor esi, esi
+    std::uint8_t const clearSecond[] = {0x31, 0xF6};
 #endif
-    for (std::size_t i = 0; i + 9 <= sizeof code; ++i) {
-        if (code[i] == 0x48 && code[i + 1] == 0x83 && code[i + 2] == ThisRegister && isCall(code[i + 4]) && code[i + 3] && code[i + 3] < 0x80 && !(code[i + 3] % 8)) {
+    // add this, imm8
+    for (std::size_t i = 0; i + 9 <= 32; ++i) {
+        if (code[i] == 0x48 && code[i + 1] == 0x83 && code[i + 2] == (0xC0 | This) && isCall(code[i + 4]) && code[i + 3] && code[i + 3] < 0x80 && !(code[i + 3] % 8)) {
             return {code[i + 3], -1, callAt(i + 4)};
         }
     }
-    for (std::size_t i = 0; i + 14 <= sizeof code; ++i) {
-        if (!std::memcmp(code + i, loadThis, sizeof loadThis) && !std::memcmp(code + i + 7, clearSecond, sizeof clearSecond) && isCall(code[i + 9])) {
-            std::int32_t pointerAt;
-            std::memcpy(&pointerAt, code + i + 3, 4);
-            return {-1, pointerAt, callAt(i + 9)};
+    // the registers that hold `this` (rbx 3, rsi 6, rdi 7: `mov reg, this`), then `mov this, [reg + disp32]`, then the
+    // call (from 1.26.60.25 the draw takes no second argument to clear)
+    unsigned holders = 1u << This;
+    for (std::size_t i = 0; i + 14 <= size; ++i) {
+        if (code[i] == 0x48 && code[i + 1] == 0x89 && (code[i + 2] & 0xF8) == (0xC0 | This << 3)) {
+            holders |= 1u << (code[i + 2] & 7);
+        }
+        std::uint8_t const base = code[i + 2] & 7;
+        if (code[i] == 0x48 && code[i + 1] == 0x8B && (code[i + 2] & 0xF8) == (0x80 | This << 3) && base != 4 && base != 5 && (holders >> base & 1)) {
+            std::size_t const call = std::memcmp(code + i + 7, clearSecond, sizeof clearSecond) ? i + 7 : i + 9;
+            if (isCall(code[call])) {
+                std::int32_t pointerAt;
+                std::memcpy(&pointerAt, code + i + 3, 4);
+                return {-1, pointerAt, callAt(call)};
+            }
         }
     }
     return {};
@@ -1010,6 +1036,9 @@ private:
         std::uintptr_t const size = stacks.end - stacks.begin;
         bool const           one  = size >= 0x40 && size <= 0x200 && !(size % 8);
         mStride                   = one ? size : 0;
+        if (one) {
+            keepStackVtable(stacks.begin);
+        }
         release(stacks);
         return one;
     }
@@ -1138,6 +1167,7 @@ AllDrops drops(World const& world, ItemTypes const& items, std::vector<BlockType
     if (!drops.error.empty()) {
         drops.types.clear();
         drops.mapColors.clear();
+        return drops;
     }
     log::info("drops: {} block types drawn, {} left to their loot tables", drops.types.size() - undrawn, undrawn);
     return drops;
