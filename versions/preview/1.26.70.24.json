@@ -1,0 +1,19 @@
+{
+  "build": "1.26.70.24",
+  "version": "1.26.70-preview.24",
+  "channel": "preview",
+  "binary": {
+    "linux": {
+      "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-linux-preview/bedrock-server-1.26.70.24.zip",
+      "sha256": "1b0606bc9bf65be6ba14180c407339e9ba9acd9816240a4da328714556decc8a",
+      "size": 101731477,
+      "supported": false
+    },
+    "windows": {
+      "url": "https://www.minecraft.net/bedrockdedicatedserver/bin-win-preview/bedrock-server-1.26.70.24.zip",
+      "sha256": "9da29635f9963bb6ca3c4957afceb8a255a23dc98caca87981116601967b194b",
+      "size": 108304711,
+      "supported": false
+    }
+  }
+}
